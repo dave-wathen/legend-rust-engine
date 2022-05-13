@@ -1,0 +1,10 @@
+# Copyright 2022 Dave Wathen. All rights reserved.
+[package]
+name = "legend_xt_flatdata"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+thiserror = "1.0.30"
