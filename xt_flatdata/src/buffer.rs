@@ -1,6 +1,6 @@
 // Copyright 2022 Dave Wathen. All rights reserved.
-//use crate::FlatDataError::InvalidUtf8;
-use crate::error::FlatDataError;
+
+use crate::FlatDataError;
 use std::cell::RefCell;
 use std::cmp::{min, Ordering};
 use std::fmt;
@@ -9,6 +9,26 @@ use std::rc::Rc;
 
 type FlatDataResult<T> = Result<T, FlatDataError>;
 
+/// A `CharCursor` represents a character position in a UTF-8 encoded resource.
+/// It is initially created using CharCursor::open.  At creation the cursor points to the first character
+/// or to the end point if the resource is empty. Advancing (`advance()` or `advance_many(1)`) will cause it
+/// to point at the next character.
+///
+/// Once a cursor is obtained it can be cloned to allow the file to be explored through multiple code paths.
+///
+/// # Example
+/// ```
+/// use legend_xt_flatdata::CharCursor;
+///
+/// let reader = Box::new("Life in the model world".as_bytes());
+/// let mut cursor = CharCursor::open(10, 30, reader).unwrap();
+/// let mut cursor2 = cursor.clone();
+///
+/// cursor.advance_many(12);
+/// cursor2.advance_many(17);
+/// assert_eq!('m', cursor.current_char().unwrap());
+/// assert_eq!("model", cursor.between(&cursor2).unwrap());
+/// ```
 pub struct CharCursor
 {
     reader: Rc<RefCell<BufferedReader>>,
@@ -42,7 +62,7 @@ impl CharCursor
 
         let mut cursor = CharCursor {
             reader: Rc::clone(&wrapped),
-            state: state,
+            state,
         };
 
         if let Some(char) = maybe_char
@@ -87,6 +107,23 @@ impl CharCursor
         Ok(())
     }
 
+    pub fn advance_to(&mut self, other: &CharCursor) -> FlatDataResult<()>
+    {
+        match (&*self).partial_cmp(other)
+        {
+            None => Err(FlatDataError::CursorResourcesDiffer),
+            Some(Ordering::Equal) => Ok(()),
+            Some(Ordering::Less) =>
+            {
+                let pre_state = self.state;
+                self.state = other.state;
+                self.reader.borrow_mut().move_cursor(pre_state, self.state);
+                Ok(())
+            }
+            Some(Ordering::Greater) => Err(FlatDataError::CursorResourcesDiffer),
+        }
+    }
+
     pub fn current_char(&self) -> Option<char>
     {
         match self.state
@@ -107,16 +144,12 @@ impl CharCursor
 
     pub fn is_end_of_data(&self) -> bool
     {
-        match self.state
-        {
-            CharCursorState::End => true,
-            _ => false,
-        }
+        matches!(self.state, CharCursorState::End)
     }
 
     pub fn between(&self, other: &CharCursor) -> FlatDataResult<String>
     {
-        match self.partial_cmp(&other)
+        match self.partial_cmp(other)
         {
             None => Err(FlatDataError::CursorResourcesDiffer),
             Some(Ordering::Equal) => Ok(String::from("")),
@@ -243,13 +276,13 @@ impl BufferedReader
         String::from_utf8(bytes).map_err(|_| FlatDataError::Utf8Error)
     }
 
-    fn move_cursor(&mut self, from: CharCursorState, to: CharCursorState) -> ()
+    fn move_cursor(&mut self, from: CharCursorState, to: CharCursorState)
     {
         self.remove_cursor(from);
         self.add_cursor(to);
     }
 
-    fn add_cursor(&mut self, state: CharCursorState) -> ()
+    fn add_cursor(&mut self, state: CharCursorState)
     {
         if let CharCursorState::CharAtByteIndex(_, index) = state
         {
@@ -257,7 +290,7 @@ impl BufferedReader
             {
                 if index >= block.start_index && index < block.end_index
                 {
-                    block.cursor_count = block.cursor_count + 1;
+                    block.cursor_count += 1;
                     return;
                 }
             }
@@ -265,7 +298,7 @@ impl BufferedReader
         }
     }
 
-    fn remove_cursor(&mut self, state: CharCursorState) -> ()
+    fn remove_cursor(&mut self, state: CharCursorState)
     {
         if let CharCursorState::CharAtByteIndex(_, index) = state
         {
@@ -273,7 +306,7 @@ impl BufferedReader
             {
                 if index >= block.start_index && index < block.end_index
                 {
-                    block.cursor_count = block.cursor_count - 1;
+                    block.cursor_count -= 1;
                     return;
                 }
             }
@@ -297,6 +330,7 @@ impl BufferedReader
                 {
                     let mut bytes: [u8; 4] = [0; 4];
                     bytes[0] = byte;
+                    #[allow(clippy::needless_range_loop)]
                     for i in 1..width
                     {
                         bytes[i] = self.byte_at(index + i as u64)?;
@@ -355,8 +389,7 @@ impl BufferedReader
         }
 
         let block_size = min(self.block_size, (self.capacity - capacity_used) as usize);
-        let mut buffer = Vec::<u8>::with_capacity(block_size);
-        buffer.resize(block_size, 0u8);
+        let mut buffer = vec![0; block_size];
         let read = self.reader.as_mut().read(&mut buffer)?;
 
         if read == 0
@@ -516,6 +549,7 @@ mod tests
         let reader = Box::new("Life in the model world".as_bytes());
 
         let cursor = CharCursor::open(5, 15, reader)?;
+        #[allow(clippy::redundant_clone)]
         let mut cursor2 = cursor.clone();
         assert!(cursor2.advance_many(15).is_err());
 
