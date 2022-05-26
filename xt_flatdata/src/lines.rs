@@ -5,11 +5,11 @@ use crate::FlatDataError;
 
 type FlatDataResult<T> = Result<T, FlatDataError>;
 
-pub struct SimpleLineReader
+pub struct SimpleLineReader<'a>
 {
     cursor: CharCursor,
     eol: EndOfLine,
-    line_number_generator: Box<dyn Iterator<Item = u64>>,
+    line_number: &'a mut Box<u64>,
     last_consumed_eol: bool,
 }
 
@@ -26,14 +26,14 @@ pub enum EndOfLine
     ExactMulti(Vec<char>),
 }
 
-impl SimpleLineReader
+impl<'a> SimpleLineReader<'a>
 {
-    pub fn new(cursor: CharCursor, eol: EndOfLine, line_number_generator: Box<dyn Iterator<Item = u64>>) -> SimpleLineReader
+    pub fn new(cursor: CharCursor, eol: EndOfLine, line_number_generator: &'a mut Box<u64>) -> SimpleLineReader<'a>
     {
         SimpleLineReader {
             cursor,
             eol,
-            line_number_generator,
+            line_number: line_number_generator,
             last_consumed_eol: false,
         }
     }
@@ -45,9 +45,10 @@ impl SimpleLineReader
             if self.last_consumed_eol
             {
                 self.last_consumed_eol = false;
+                *self.line_number.as_mut() += 1;
                 return Ok(Some(SimpleLine {
                     text: String::new(),
-                    line_number: self.line_number_generator.next().unwrap(),
+                    line_number: **self.line_number,
                 }));
             }
             else
@@ -64,9 +65,10 @@ impl SimpleLineReader
         let line = self.cursor.between(&ahead)?;
         self.cursor.advance_to(&ahead)?;
         self.consume_end_of_line()?;
+        *self.line_number.as_mut() += 1;
         Ok(Some(SimpleLine {
             text: line,
-            line_number: self.line_number_generator.next().unwrap(),
+            line_number: **self.line_number,
         }))
     }
 
@@ -215,7 +217,8 @@ mod test
     fn can_read_lines(reader: Box<dyn io::Read>, eol: EndOfLine, expected: Vec<&str>) -> FlatDataResult<()>
     {
         let cursor = CharCursor::open(10, 20, reader)?;
-        let mut lines = SimpleLineReader::new(cursor, eol, Box::new(1..));
+        let mut lno = Box::new(0);
+        let mut lines = SimpleLineReader::new(cursor, eol, &mut lno);
 
         let mut expected_num = 1;
         for expected_line in expected.iter()
@@ -226,6 +229,9 @@ mod test
             expected_num += 1;
         }
         assert!(lines.read_line()?.is_none());
+
+        // Ensure borrowed line number has been updated
+        assert_eq!(expected.len() as u64, *lno);
 
         Ok(())
     }
