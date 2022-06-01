@@ -1,3 +1,5 @@
 brace_style = "AlwaysNextLine"
 control_brace_style = "AlwaysNextLine"
 max_width = 150
+fn_single_line = true
+use_small_heuristics = "Max"
