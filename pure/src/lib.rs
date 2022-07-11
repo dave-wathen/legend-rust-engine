@@ -1,18 +1,20 @@
 // Copyright 2022 Dave Wathen. All rights reserved.
 
 pub use crate::multiplicity::Multiplicity;
-pub use crate::primitives::PURE_FALSE;
-pub use crate::primitives::PURE_INTEGER_0;
-pub use crate::primitives::PURE_INTEGER_1;
-pub use crate::primitives::PURE_TRUE;
+pub use crate::primitive::boolean::PURE_FALSE;
+pub use crate::primitive::boolean::PURE_TRUE;
+pub use crate::primitive::integer::PURE_INTEGER_0;
+pub use crate::primitive::integer::PURE_INTEGER_1;
 pub use crate::pure_type::Type;
 
 mod collection;
+#[allow(non_camel_case_types)]
 mod multiplicity;
 pub mod natives;
-mod primitives;
+mod primitive;
 mod pure_type;
-mod value_spec;
+
+pub trait PureValue {}
 
 #[macro_export]
 macro_rules! pure {
