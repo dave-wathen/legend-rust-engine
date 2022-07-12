@@ -6,10 +6,10 @@ pub use self::empty::PureEmpty;
 
 pub(super) mod empty;
 
-pub trait PureCollection<T>: pure_type::Typed + IntoIterator<Item = T>
-where
-    T: crate::PureValue,
+pub trait PureCollection: pure_type::Typed + IntoIterator<Item = Self::PureItem>
 {
+    type PureItem: crate::PureValue;
+
     fn size(&self) -> primitive::PureInteger;
 }
 

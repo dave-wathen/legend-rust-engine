@@ -1,46 +1,44 @@
 // // Copyright 2022 Dave Wathen. All rights reserved.
 
-use crate::{collection, PureValue};
+use crate::collection;
 use crate::{primitive, pure_type};
 
-pub struct PureEmpty<T: PureValue>
+pub struct PureEmpty
 {
     pure_type: pure_type::Type,
-    phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: PureValue> PureEmpty<T>
+impl PureEmpty
 {
-    pub fn new() -> Self { Self { pure_type: pure_type::Type::Nil, phantom: std::marker::PhantomData } }
+    pub fn new() -> Self { Self { pure_type: pure_type::Type::Nil } }
 }
 
-impl<T: PureValue> pure_type::Typed for PureEmpty<T>
+impl pure_type::Typed for PureEmpty
 {
     fn pure_type(&self) -> pure_type::Type { self.pure_type }
 }
 
-impl<T: PureValue> collection::PureCollection<T> for PureEmpty<T>
+impl collection::PureCollection for PureEmpty
 {
+    type PureItem = crate::Nil;
+
     fn size(&self) -> primitive::PureInteger { crate::PURE_INTEGER_0 }
 }
 
-impl<T: PureValue> IntoIterator for PureEmpty<T>
+impl IntoIterator for PureEmpty
 {
-    type Item = T;
+    type Item = crate::Nil;
 
-    type IntoIter = EmptyIter<T>;
+    type IntoIter = EmptyIter;
 
-    fn into_iter(self) -> Self::IntoIter { EmptyIter { phantom: std::marker::PhantomData } }
+    fn into_iter(self) -> Self::IntoIter { EmptyIter {} }
 }
 
-pub struct EmptyIter<T>
-{
-    phantom: std::marker::PhantomData<T>,
-}
+pub struct EmptyIter {}
 
-impl<T> Iterator for EmptyIter<T>
+impl Iterator for EmptyIter
 {
-    type Item = T;
+    type Item = crate::Nil;
 
     fn next(&mut self) -> Option<Self::Item> { None }
 }
@@ -58,8 +56,7 @@ mod tests
     #[test]
     fn empty()
     {
-        // TODO try to get rid of the need for NoValue to be explicitly used
-        let empty: PureEmpty<NoValue> = PureEmpty::new();
+        let empty: PureEmpty = PureEmpty::new();
         assert_eq!(0, *empty.size());
         assert_eq!(pure_type::Type::Nil, empty.pure_type());
         assert_eq!(None, empty.into_iter().next());
