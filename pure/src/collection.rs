@@ -3,13 +3,13 @@
 use crate::{primitive, pure_type};
 
 pub use self::empty::PureEmpty;
+pub use self::value::PureValue;
 
 pub(super) mod empty;
+pub(super) mod value;
 
-pub trait PureCollection: pure_type::Typed + IntoIterator<Item = Self::PureItem>
+pub trait PureCollection: pure_type::Typed + IntoIterator<Item = PureValue>
 {
-    type PureItem: crate::PureValue;
-
     fn size(&self) -> primitive::PureInteger;
 }
 

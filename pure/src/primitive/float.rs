@@ -6,9 +6,7 @@ pub const PURE_FLOAT_0: PureFloat = PureFloat(0.0);
 
 // TODO Pure Eq in terms of PartialEq?
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub struct PureFloat(f64);
-
-impl crate::PureValue for PureFloat {}
+pub struct PureFloat(pub f64);
 
 impl fmt::Display for PureFloat
 {

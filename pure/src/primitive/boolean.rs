@@ -6,9 +6,7 @@ pub const PURE_TRUE: PureBoolean = PureBoolean(true);
 pub const PURE_FALSE: PureBoolean = PureBoolean(false);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct PureBoolean(bool);
-
-impl crate::PureValue for PureBoolean {}
+pub struct PureBoolean(pub bool);
 
 impl fmt::Display for PureBoolean
 {

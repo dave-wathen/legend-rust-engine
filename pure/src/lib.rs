@@ -14,13 +14,6 @@ pub mod natives;
 mod primitive;
 mod pure_type;
 
-pub trait PureValue {}
-
-#[derive(PartialEq, Eq, Debug)]
-pub enum Nil {}
-
-impl PureValue for Nil {}
-
 #[macro_export]
 macro_rules! pure {
     ([ $l:literal .. $u:literal ]) => {

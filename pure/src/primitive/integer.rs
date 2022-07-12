@@ -7,9 +7,7 @@ pub const PURE_INTEGER_1: PureInteger = PureInteger(1);
 
 // TODO Consider a scaling integer type (along with Decimal perhaps)
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct PureInteger(i64);
-
-impl crate::PureValue for PureInteger {}
+pub struct PureInteger(pub i64);
 
 impl fmt::Display for PureInteger
 {

@@ -20,14 +20,12 @@ impl pure_type::Typed for PureEmpty
 
 impl collection::PureCollection for PureEmpty
 {
-    type PureItem = crate::Nil;
-
     fn size(&self) -> primitive::PureInteger { crate::PURE_INTEGER_0 }
 }
 
 impl IntoIterator for PureEmpty
 {
-    type Item = crate::Nil;
+    type Item = super::PureValue;
 
     type IntoIter = EmptyIter;
 
@@ -38,14 +36,10 @@ pub struct EmptyIter {}
 
 impl Iterator for EmptyIter
 {
-    type Item = crate::Nil;
+    type Item = super::PureValue;
 
     fn next(&mut self) -> Option<Self::Item> { None }
 }
-
-#[derive(PartialEq, Debug)]
-struct NoValue {}
-impl crate::PureValue for NoValue {}
 
 #[cfg(test)]
 mod tests
