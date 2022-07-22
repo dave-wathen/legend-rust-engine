@@ -1,14 +1,7 @@
 // Copyright 2022 Dave Wathen. All rights reserved.
 
+use crate::*;
 use std::fmt;
-
-// TODO treat as a class?
-#[derive(PartialEq, Eq)]
-pub struct Multiplicity
-{
-    lower_bound: i64,
-    upper_bound: Option<i64>,
-}
 
 macro_rules! pure_multiplicity {
     ([ $l:literal .. $u:literal ]) => {
@@ -25,12 +18,24 @@ macro_rules! pure_multiplicity {
     };
 }
 
-impl Multiplicity
+pub const PURE_ONE: Multiplicity = pure_multiplicity!([1]);
+pub const PURE_ZERO: Multiplicity = pure_multiplicity!([0]);
+pub const ZERO_ONE: Multiplicity = pure_multiplicity!([0..1]);
+pub const ZERO_MANY: Multiplicity = pure_multiplicity!([*]);
+
+// TODO treat as a class?
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub struct Multiplicity
 {
-    pub const ZERO_ONE: Multiplicity = pure_multiplicity!([0..1]);
-    pub const ZERO_MANY: Multiplicity = pure_multiplicity!([*]);
-    pub const PURE_ONE: Multiplicity = pure_multiplicity!([1]);
+    pub lower_bound: i64,
+    pub upper_bound: Option<i64>,
 }
+pub trait Multiplicitied: pure_type::Typed
+{
+    fn multiplicity(&self) -> Multiplicity;
+}
+
+impl Multiplicity {}
 
 impl From<i64> for Multiplicity
 {
@@ -64,7 +69,7 @@ impl From<std::ops::RangeToInclusive<i64>> for Multiplicity
 
 impl From<std::ops::RangeFull> for Multiplicity
 {
-    fn from(_: std::ops::RangeFull) -> Self { Multiplicity::ZERO_MANY }
+    fn from(_: std::ops::RangeFull) -> Self { ZERO_MANY }
 }
 
 impl fmt::Display for Multiplicity
@@ -101,25 +106,31 @@ impl fmt::Debug for Multiplicity
 #[cfg(test)]
 mod tests
 {
+    use super::*;
     use crate::multiplicity::Multiplicity;
 
     #[test]
     fn standard_multiplicities()
     {
-        assert_eq!(0, Multiplicity::ZERO_ONE.lower_bound);
-        assert_eq!(Some(1), Multiplicity::ZERO_ONE.upper_bound);
-        assert_eq!("[0..1]", format!("{}", Multiplicity::ZERO_ONE));
-        assert_eq!("[0..1]", format!("{:?}", Multiplicity::ZERO_ONE));
+        assert_eq!(0, ZERO_ONE.lower_bound);
+        assert_eq!(Some(1), ZERO_ONE.upper_bound);
+        assert_eq!("[0..1]", format!("{}", ZERO_ONE));
+        assert_eq!("[0..1]", format!("{:?}", ZERO_ONE));
 
-        assert_eq!(0, Multiplicity::ZERO_MANY.lower_bound);
-        assert_eq!(None, Multiplicity::ZERO_MANY.upper_bound);
-        assert_eq!("[*]", format!("{}", Multiplicity::ZERO_MANY));
-        assert_eq!("[*]", format!("{:?}", Multiplicity::ZERO_MANY));
+        assert_eq!(0, ZERO_MANY.lower_bound);
+        assert_eq!(None, ZERO_MANY.upper_bound);
+        assert_eq!("[*]", format!("{}", ZERO_MANY));
+        assert_eq!("[*]", format!("{:?}", ZERO_MANY));
 
-        assert_eq!(1, Multiplicity::PURE_ONE.lower_bound);
-        assert_eq!(Some(1), Multiplicity::PURE_ONE.upper_bound);
-        assert_eq!("[1]", format!("{}", Multiplicity::PURE_ONE));
-        assert_eq!("[1]", format!("{:?}", Multiplicity::PURE_ONE));
+        assert_eq!(1, PURE_ONE.lower_bound);
+        assert_eq!(Some(1), PURE_ONE.upper_bound);
+        assert_eq!("[1]", format!("{}", PURE_ONE));
+        assert_eq!("[1]", format!("{:?}", PURE_ONE));
+
+        assert_eq!(0, PURE_ZERO.lower_bound);
+        assert_eq!(Some(0), PURE_ZERO.upper_bound);
+        assert_eq!("[0]", format!("{}", PURE_ZERO));
+        assert_eq!("[0]", format!("{:?}", PURE_ZERO));
     }
 
     #[test]
@@ -152,23 +163,23 @@ mod tests
         assert_eq!("[0..4]", format!("{}", m));
 
         let m = Multiplicity::from(..);
-        assert_eq!(Multiplicity::ZERO_MANY, m);
+        assert_eq!(ZERO_MANY, m);
         assert_eq!("[*]", format!("{}", m));
 
         let m = Multiplicity::from(0..);
-        assert_eq!(Multiplicity::ZERO_MANY, m);
+        assert_eq!(ZERO_MANY, m);
         assert_eq!("[*]", format!("{}", m));
 
         let m = Multiplicity::from(0..=1);
-        assert_eq!(Multiplicity::ZERO_ONE, m);
+        assert_eq!(ZERO_ONE, m);
         assert_eq!("[0..1]", format!("{}", m));
 
         let m = Multiplicity::from(..=1);
-        assert_eq!(Multiplicity::ZERO_ONE, m);
+        assert_eq!(ZERO_ONE, m);
         assert_eq!("[0..1]", format!("{}", m));
 
         let m = Multiplicity::from(1);
-        assert_eq!(Multiplicity::PURE_ONE, m);
+        assert_eq!(PURE_ONE, m);
         assert_eq!("[1]", format!("{}", m));
     }
 

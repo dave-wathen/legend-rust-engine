@@ -1,59 +1,121 @@
 // // Copyright 2022 Dave Wathen. All rights reserved.
 
-// use crate::{collection::PureCollection, primitives::PureBoolean};
+use crate::*;
 
-// pub fn and(left: PureBoolean, right: PureBoolean) -> PureBoolean { PureBoolean::from(*left && *right) }
+// TODO Simplify function calling and composition
 
-// pub fn or(left: PureBoolean, right: PureBoolean) -> PureBoolean { PureBoolean::from(*left || *right) }
+pub fn and(left: Value, right: Value) -> PureExecutionResult<Value>
+{
+    match (left, right)
+    {
+        // TODO Lazy eval
+        (Value::Boolean(l), Value::Boolean(r)) => Ok(Value::Boolean(l && r)),
+        _ => Err(PureExecutionError::IllegalFunctionCall {
+            func: "meta::pure::functions::boolean::and_Boolean_1__Boolean_1__Boolean_1_",
+            args: vec![left, right],
+        }),
+    }
+}
 
-// pub fn not(b: PureBoolean) -> PureBoolean { PureBoolean::from(!*b) }
+pub fn or(left: Value, right: Value) -> PureExecutionResult<Value>
+{
+    match (left, right)
+    {
+        // TODO Lazy eval
+        (Value::Boolean(l), Value::Boolean(r)) => Ok(Value::Boolean(l || r)),
+        _ => Err(PureExecutionError::IllegalFunctionCall {
+            func: "meta::pure::functions::boolean::or_Boolean_1__Boolean_1__Boolean_1_",
+            args: vec![left, right],
+        }),
+    }
+}
 
-// pub fn is_empty(c: impl PureCollection) -> PureBoolean { (*c.size() == 0).into() }
+pub fn not(b: Value) -> PureExecutionResult<Value>
+{
+    match b
+    {
+        // TODO Lazy eval
+        Value::Boolean(b) => Ok(Value::Boolean(!b)),
+        _ => Err(PureExecutionError::IllegalFunctionCall { func: "meta::pure::functions::boolean::not_Boolean_1__Boolean_1_", args: vec![b] }),
+    }
+}
 
-// pub fn is_not_empty(c: impl PureCollection) -> PureBoolean { not(is_empty(c)) }
+pub fn is_empty(c: Collection) -> PureExecutionResult<Value> { Ok(Value::Boolean(c.size().as_i64()? == 0)) }
 
-// #[cfg(test)]
-// mod tests
-// {
-//     use super::*;
-//     use crate::{collection::PureEmpty, PURE_FALSE, PURE_TRUE};
+pub fn is_not_empty(c: Collection) -> PureExecutionResult<Value> { not(is_empty(c)?) }
 
-//     #[test]
-//     fn boolean_and()
-//     {
-//         assert_eq!(PURE_TRUE, and(PURE_TRUE, PURE_TRUE));
-//         assert_eq!(PURE_FALSE, and(PURE_FALSE, PURE_TRUE));
-//         assert_eq!(PURE_FALSE, and(PURE_TRUE, PURE_FALSE));
-//         assert_eq!(PURE_FALSE, and(PURE_FALSE, PURE_FALSE));
-//     }
+#[cfg(test)]
+mod tests
+{
+    use super::*;
 
-//     #[test]
-//     fn boolean_or()
-//     {
-//         assert_eq!(PURE_TRUE, or(PURE_TRUE, PURE_TRUE));
-//         assert_eq!(PURE_TRUE, or(PURE_FALSE, PURE_TRUE));
-//         assert_eq!(PURE_TRUE, or(PURE_TRUE, PURE_FALSE));
-//         assert_eq!(PURE_FALSE, or(PURE_FALSE, PURE_FALSE));
-//     }
+    #[test]
+    fn boolean_and() -> PureExecutionResult<()>
+    {
+        assert_eq!(data::boolean(true), and(data::boolean(true), data::boolean(true))?);
+        assert_eq!(data::boolean(false), and(data::boolean(false), data::boolean(true))?);
+        assert_eq!(data::boolean(false), and(data::boolean(true), data::boolean(false))?);
+        assert_eq!(data::boolean(false), and(data::boolean(false), data::boolean(false))?);
 
-//     #[test]
-//     fn boolean_not()
-//     {
-//         assert_eq!(PURE_TRUE, not(PURE_FALSE));
-//         assert_eq!(PURE_FALSE, not(PURE_TRUE));
-//     }
+        let bad = and(data::integer(1), data::boolean(false));
+        assert!(bad.is_err());
+        assert_eq!(
+            "Illegal call to function meta::pure::functions::boolean::and_Boolean_1__Boolean_1__Boolean_1_ with arguments [Integer(1), Boolean(false)]",
+            format!("{}", bad.err().unwrap())
+        );
 
-//     #[test]
-//     fn collection_is_empty()
-//     {
-//         assert_eq!(PURE_TRUE, is_empty(PureEmpty::new()));
-//         assert_eq!(PURE_FALSE, is_empty(PURE_TRUE));
-//     }
+        Ok(())
+    }
 
-//     #[test]
-//     fn collection_is_not_empty()
-//     {
-//         assert_eq!(PURE_FALSE, is_not_empty(PureEmpty::new()));
-//         assert_eq!(PURE_TRUE, is_not_empty(PURE_TRUE));
-//     }
-// }
+    #[test]
+    fn boolean_or() -> PureExecutionResult<()>
+    {
+        assert_eq!(data::boolean(true), or(data::boolean(true), data::boolean(true))?);
+        assert_eq!(data::boolean(true), or(data::boolean(false), data::boolean(true))?);
+        assert_eq!(data::boolean(true), or(data::boolean(true), data::boolean(false))?);
+        assert_eq!(data::boolean(false), or(data::boolean(false), data::boolean(false))?);
+
+        let bad = or(data::integer(1), data::boolean(false));
+        assert!(bad.is_err());
+        assert_eq!(
+            "Illegal call to function meta::pure::functions::boolean::or_Boolean_1__Boolean_1__Boolean_1_ with arguments [Integer(1), Boolean(false)]",
+            format!("{}", bad.err().unwrap())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn boolean_not() -> PureExecutionResult<()>
+    {
+        assert_eq!(data::boolean(true), not(data::boolean(false))?);
+        assert_eq!(data::boolean(false), not(data::boolean(true))?);
+
+        let bad = not(data::integer(1));
+        assert!(bad.is_err());
+        assert_eq!(
+            "Illegal call to function meta::pure::functions::boolean::not_Boolean_1__Boolean_1_ with arguments [Integer(1)]",
+            format!("{}", bad.err().unwrap())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn collection_is_empty() -> PureExecutionResult<()>
+    {
+        assert_eq!(data::boolean(true), is_empty(ZERO_NIL)?);
+        assert_eq!(data::boolean(false), is_empty(data::CollectionBuilder::new(Type::Integer, ZERO_MANY).push(data::integer(1))?.build()?)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn collection_is_not_empty() -> PureExecutionResult<()>
+    {
+        assert_eq!(data::boolean(false), is_not_empty(ZERO_NIL)?);
+        assert_eq!(data::boolean(true), is_not_empty(data::CollectionBuilder::new(Type::Integer, ZERO_MANY).push(data::integer(1))?.build()?)?);
+
+        Ok(())
+    }
+}

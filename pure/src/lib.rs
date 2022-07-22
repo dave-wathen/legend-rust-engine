@@ -1,18 +1,24 @@
 // Copyright 2022 Dave Wathen. All rights reserved.
 
+pub use crate::data::Collection;
+pub use crate::data::Value;
+pub use crate::data::ZERO_NIL;
+pub use crate::error::PureExecutionError;
 pub use crate::multiplicity::Multiplicity;
-pub use crate::primitive::boolean::PURE_FALSE;
-pub use crate::primitive::boolean::PURE_TRUE;
-pub use crate::primitive::integer::PURE_INTEGER_0;
-pub use crate::primitive::integer::PURE_INTEGER_1;
+pub use crate::multiplicity::PURE_ONE;
+pub use crate::multiplicity::PURE_ZERO;
+pub use crate::multiplicity::ZERO_MANY;
+pub use crate::multiplicity::ZERO_ONE;
 pub use crate::pure_type::Type;
 
-mod collection;
+pub mod data;
+pub mod error;
 #[allow(non_camel_case_types)]
-mod multiplicity;
+pub mod multiplicity;
 pub mod natives;
-mod primitive;
-mod pure_type;
+pub mod pure_type;
+
+pub type PureExecutionResult<T> = Result<T, crate::PureExecutionError>;
 
 #[macro_export]
 macro_rules! pure {
@@ -23,7 +29,7 @@ macro_rules! pure {
         $crate::Multiplicity::from($m)
     };
     ([ * ]) => {
-        $crate::Multiplicity::ZERO_MANY
+        $crate::ZERO_MANY
     };
     ([ $l:literal .. * ]) => {
         $crate::Multiplicity::from($l..)
@@ -33,6 +39,7 @@ macro_rules! pure {
 #[cfg(test)]
 mod tests
 {
+    use super::*;
     use crate::multiplicity::Multiplicity;
 
     #[test]
@@ -45,7 +52,7 @@ mod tests
         assert_eq!(Multiplicity::from(1..=4), m);
 
         let m = pure!([*]);
-        assert_eq!(Multiplicity::ZERO_MANY, m);
+        assert_eq!(ZERO_MANY, m);
 
         let m = pure!([1..*]);
         assert_eq!(Multiplicity::from(1..), m);
