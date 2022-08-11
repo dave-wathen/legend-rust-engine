@@ -6,7 +6,7 @@ use crate::{pure_type::Typed, *};
 
 pub const ZERO_NIL: Collection = Collection { pure_type: Type::Nil, multiplicity: PURE_ZERO, contents: CollectionContents::Zero };
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value
 {
     Boolean(bool),
@@ -48,6 +48,11 @@ impl Value
             _ => Err(crate::PureExecutionError::NotAFloat { found: (*self).pure_type() }),
         }
     }
+
+    pub fn to_collection(self) -> Collection
+    {
+        Collection { pure_type: self.pure_type(), multiplicity: PURE_ONE, contents: CollectionContents::One(self) }
+    }
 }
 
 impl Display for Value
@@ -76,6 +81,7 @@ impl pure_type::Typed for Value
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Collection
 {
     pure_type: pure_type::Type,
@@ -94,14 +100,89 @@ impl Collection
             CollectionContents::Many(many) => integer(many.len() as i64),
         }
     }
+
+    pub fn assume_boolean_one(&self) -> PureExecutionResult<bool>
+    {
+        if let CollectionContents::One(Value::Boolean(b)) = &self.contents
+        {
+            Ok(*b)
+        }
+        else
+        {
+            Err(PureExecutionError::UnexpectedValue { expected: "Boolean[1]".into(), got: self.full_type_as_string() })
+        }
+    }
+
+    pub fn assume_integer_one(&self) -> PureExecutionResult<i64>
+    {
+        if let CollectionContents::One(Value::Integer(i)) = &self.contents
+        {
+            Ok(*i)
+        }
+        else
+        {
+            Err(PureExecutionError::UnexpectedValue { expected: "Integer[1]".into(), got: self.full_type_as_string() })
+        }
+    }
+
+    pub fn assume_float_one(&self) -> PureExecutionResult<f64>
+    {
+        if let CollectionContents::One(Value::Float(f)) = &self.contents
+        {
+            Ok(*f)
+        }
+        else
+        {
+            Err(PureExecutionError::UnexpectedValue { expected: "Float[1]".into(), got: self.full_type_as_string() })
+        }
+    }
+
+    pub fn assume_boolean_many(&self) -> PureExecutionResult<impl Iterator<Item = PureExecutionResult<bool>> + '_>
+    {
+        if self.pure_type() == Type::Integer
+        {
+            Ok(self.into_iter().map(|x| x.as_bool()))
+        }
+        else
+        {
+            Err(PureExecutionError::UnexpectedValue { expected: "Boolean[*]".into(), got: self.full_type_as_string() })
+        }
+    }
+
+    pub fn assume_integer_many(&self) -> PureExecutionResult<impl Iterator<Item = PureExecutionResult<i64>> + '_>
+    {
+        if self.pure_type() == Type::Integer
+        {
+            Ok(self.into_iter().map(|x| x.as_i64()))
+        }
+        else
+        {
+            Err(PureExecutionError::UnexpectedValue { expected: "Integer[*]".into(), got: self.full_type_as_string() })
+        }
+    }
+
+    pub fn assume_float_many(&self) -> PureExecutionResult<impl Iterator<Item = PureExecutionResult<f64>> + '_>
+    {
+        if self.pure_type() == Type::Float
+        {
+            Ok(self.into_iter().map(|x| x.as_f64()))
+        }
+        else
+        {
+            Err(PureExecutionError::UnexpectedValue { expected: "Float[*]".into(), got: self.full_type_as_string() })
+        }
+    }
 }
 
+#[derive(Debug, PartialEq)]
 enum CollectionContents
 {
     Zero,
     One(Value),
     Many(Vec<Value>),
 }
+
+impl TypedWithMultiplicity for Collection {}
 
 impl pure_type::Typed for Collection
 {
@@ -151,6 +232,21 @@ impl<'a> Iterator for Iter<'a>
     }
 }
 
+pub fn boolean_one(from: bool) -> Collection
+{
+    Collection { pure_type: Type::Boolean, multiplicity: PURE_ONE, contents: CollectionContents::One(boolean(from)) }
+}
+
+pub fn integer_one(from: i64) -> Collection
+{
+    Collection { pure_type: Type::Integer, multiplicity: PURE_ONE, contents: CollectionContents::One(integer(from)) }
+}
+
+pub fn float_one(from: f64) -> Collection
+{
+    Collection { pure_type: Type::Float, multiplicity: PURE_ONE, contents: CollectionContents::One(float(from)) }
+}
+
 pub struct CollectionBuilder
 {
     collection: Collection,
@@ -171,7 +267,6 @@ impl CollectionBuilder
             return Err(PureExecutionError::IllegalAssignment { from: value.pure_type(), to: col_type });
         }
 
-        // TODO Check multiplicity
         if let Some(col_max) = self.collection.multiplicity.upper_bound
         {
             if self.collection.size().as_i64()? == col_max
@@ -260,13 +355,12 @@ mod tests
     #[test]
     fn build_one_integer() -> PureExecutionResult<()>
     {
-        let i = integer(2);
-        let one = CollectionBuilder::new(Type::Integer, PURE_ONE).push(i)?.build()?;
+        let one = CollectionBuilder::new(Type::Integer, PURE_ONE).push(integer(2))?.build()?;
         assert_eq!(1, one.size().as_i64()?);
         assert_eq!(pure_type::Type::Integer, one.pure_type());
 
         let mut iter = (&one).into_iter();
-        assert_eq!(Some(&i), iter.next());
+        assert_eq!(Some(&integer(2)), iter.next());
         assert_eq!(None, iter.next());
 
         Ok(())
@@ -343,7 +437,4 @@ mod tests
 
         Ok(())
     }
-
-    // TODO Tests for:
-    // Insufficient elements at build
 }

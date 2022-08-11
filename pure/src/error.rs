@@ -7,6 +7,21 @@ use crate::*;
 #[derive(Error, Debug)]
 pub enum PureExecutionError
 {
+    #[error("Cast exception: {from} cannot be cast to {to}")]
+    IllegalCast
+    {
+        from: String, to: String
+    },
+    #[error("Unexpected value: expected {expected} but got {got}")]
+    UnexpectedValue
+    {
+        expected: String, got: String
+    },
+    #[error("Invalid argument passed to arg {arg} of {func}: {cause}")]
+    IllegalArgument
+    {
+        func: &'static str, arg: usize, cause: String
+    },
     #[error("Illegal assignment: {from} value cannot be assigned to {to}")]
     IllegalAssignment
     {
@@ -31,10 +46,5 @@ pub enum PureExecutionError
     NotAFloat
     {
         found: Type
-    },
-    #[error("Illegal call to function {func} with arguments {args:?}")]
-    IllegalFunctionCall
-    {
-        func: &'static str, args: Vec<Value>
     },
 }

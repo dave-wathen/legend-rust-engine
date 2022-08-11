@@ -4,12 +4,14 @@ pub use crate::data::Collection;
 pub use crate::data::Value;
 pub use crate::data::ZERO_NIL;
 pub use crate::error::PureExecutionError;
+pub use crate::multiplicity::Multiplicitied;
 pub use crate::multiplicity::Multiplicity;
 pub use crate::multiplicity::PURE_ONE;
 pub use crate::multiplicity::PURE_ZERO;
 pub use crate::multiplicity::ZERO_MANY;
 pub use crate::multiplicity::ZERO_ONE;
 pub use crate::pure_type::Type;
+pub use crate::pure_type::Typed;
 
 pub mod data;
 pub mod error;
@@ -19,6 +21,11 @@ pub mod natives;
 pub mod pure_type;
 
 pub type PureExecutionResult<T> = Result<T, crate::PureExecutionError>;
+
+trait TypedWithMultiplicity: Typed + Multiplicitied
+{
+    fn full_type_as_string(&self) -> String { format!("{}{}", self.pure_type(), self.multiplicity()) }
+}
 
 #[macro_export]
 macro_rules! pure {

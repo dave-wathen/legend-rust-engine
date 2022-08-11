@@ -17,6 +17,10 @@ pub const PRIMITIVES: [Type; 12] = [
     Type::LatestDate,
 ];
 
+pub const NUMBERS: [Type; 4] = [Type::Number, Type::Integer, Type::Float, Type::Decimal];
+
+pub const DATES: [Type; 5] = [Type::Date, Type::StrictTime, Type::StrictDate, Type::DateTime, Type::LatestDate];
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Type
 {
@@ -46,6 +50,8 @@ const REL_ANY: TypeRelation = TypeRelation::Type(Type::Any);
 impl Type
 {
     pub fn is_primitive(&self) -> bool { PRIMITIVES.iter().any(|prim| prim == self) }
+    pub fn is_number(&self) -> bool { NUMBERS.iter().any(|prim| prim == self) }
+    pub fn is_date(&self) -> bool { DATES.iter().any(|prim| prim == self) }
     pub fn is_class(&self) -> bool { false } // TODO
     pub fn is_enum(&self) -> bool { false } // TODO
     pub fn is_measure(&self) -> bool { false } // TODO
