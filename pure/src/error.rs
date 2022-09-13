@@ -32,6 +32,11 @@ pub enum PureExecutionError
     {
         size: i64, mult: Multiplicity
     },
+    #[error("Illegal value for type {pure_type}: {value}")]
+    IllegalValue
+    {
+        pure_type: Type, value: String
+    },
     #[error("Expected a Boolean value but got a {found}")]
     NotABoolean
     {
@@ -47,4 +52,6 @@ pub enum PureExecutionError
     {
         found: Type
     },
+    #[error("Infallible")]
+    Infallible(#[from] std::convert::Infallible),
 }

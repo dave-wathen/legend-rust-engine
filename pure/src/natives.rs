@@ -79,16 +79,16 @@ pub fn meta_pure_functions_math_plus_Number_MANY__Number_1__(col: &Collection) -
     }
 
     let mut error = None;
-    let sum = col.into_iter().fold(integer(0), |a, n| match (a, n)
+    let sum = col.into_iter().fold(0.into(), |a, n| match (a, n)
     {
-        (Value::Integer(l), Value::Integer(r)) => integer(l + r),
+        (Value::Integer(l), Value::Integer(r)) => (l + r).into(),
         (Value::Integer(l), Value::Float(r)) => float(l as f64 + r),
         (Value::Float(l), Value::Integer(r)) => float(l + *r as f64),
         (Value::Float(l), Value::Float(r)) => float(l + r),
         _ =>
         {
             error = Some(PureExecutionError::UnexpectedValue { expected: "Number".into(), got: n.pure_type().to_string() });
-            integer(0)
+            0.into()
         }
     });
 
@@ -98,7 +98,7 @@ pub fn meta_pure_functions_math_plus_Number_MANY__Number_1__(col: &Collection) -
 #[allow(non_snake_case)]
 pub fn meta_pure_functions_collection_isEmpty_Any_MANY__Boolean_1_(c: &Collection) -> PureExecutionResult<Collection>
 {
-    Ok(boolean_one(c.size().as_i64()? == 0))
+    Ok(boolean_one(c.size()?.as_i64()? == 0))
 }
 
 #[allow(non_snake_case)]
@@ -181,11 +181,8 @@ mod tests
     fn integer_plus() -> PureExecutionResult<()>
     {
         assert_eq!(integer_one(0), iplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).build()?)?);
-        assert_eq!(integer_one(1), iplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(integer(1))?.build()?)?);
-        assert_eq!(
-            integer_one(6),
-            iplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(integer(1))?.push(integer(2))?.push(integer(3))?.build()?)?
-        );
+        assert_eq!(integer_one(1), iplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(1)?.build()?)?);
+        assert_eq!(integer_one(6), iplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(1)?.push(2)?.push(3)?.build()?)?);
 
         let bad = iplus(&ZERO_NIL);
         assert!(bad.is_err());
@@ -201,11 +198,8 @@ mod tests
     fn float_plus() -> PureExecutionResult<()>
     {
         assert_eq!(float_one(0.0), fplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).build()?)?);
-        assert_eq!(float_one(1.1), fplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).push(float(1.1))?.build()?)?);
-        assert_eq!(
-            float_one(6.6),
-            fplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).push(float(1.1))?.push(float(2.2))?.push(float(3.3))?.build()?)?
-        );
+        assert_eq!(float_one(1.1), fplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).push(1.1)?.build()?)?);
+        assert_eq!(float_one(6.6), fplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).push(1.1)?.push(2.2)?.push(3.3)?.build()?)?);
 
         let bad = fplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).build()?);
         assert!(bad.is_err());
@@ -221,23 +215,14 @@ mod tests
     fn number_plus() -> PureExecutionResult<()>
     {
         assert_eq!(integer_one(0), nplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).build()?)?);
-        assert_eq!(integer_one(1), nplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(integer(1))?.build()?)?);
-        assert_eq!(
-            integer_one(6),
-            nplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(integer(1))?.push(integer(2))?.push(integer(3))?.build()?)?
-        );
+        assert_eq!(integer_one(1), nplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(1)?.build()?)?);
+        assert_eq!(integer_one(6), nplus(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(1)?.push(2)?.push(3)?.build()?)?);
 
         assert_eq!(integer_one(0), nplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).build()?)?);
-        assert_eq!(float_one(1.1), nplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).push(float(1.1))?.build()?)?);
-        assert_eq!(
-            float_one(6.6),
-            nplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).push(float(1.1))?.push(float(2.2))?.push(float(3.3))?.build()?)?
-        );
+        assert_eq!(float_one(1.1), nplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).push(1.1)?.build()?)?);
+        assert_eq!(float_one(6.6), nplus(&CollectionBuilder::new(Type::Float, ZERO_MANY).push(1.1)?.push(2.2)?.push(3.3)?.build()?)?);
 
-        assert_eq!(
-            float_one(6.4),
-            nplus(&CollectionBuilder::new(Type::Number, ZERO_MANY).push(float(1.1))?.push(integer(2))?.push(float(3.3))?.build()?)?
-        );
+        assert_eq!(float_one(6.4), nplus(&CollectionBuilder::new(Type::Number, ZERO_MANY).push(1.1)?.push(2)?.push(3.3)?.build()?)?);
 
         let bad = nplus(&CollectionBuilder::new(Type::Boolean, ZERO_MANY).build()?);
         assert!(bad.is_err());
@@ -253,7 +238,7 @@ mod tests
     fn collection_is_empty() -> PureExecutionResult<()>
     {
         assert_eq!(boolean_one(true), is_empty(&ZERO_NIL)?);
-        assert_eq!(boolean_one(false), is_empty(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(integer(1))?.build()?)?);
+        assert_eq!(boolean_one(false), is_empty(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(1)?.build()?)?);
 
         Ok(())
     }
@@ -262,7 +247,7 @@ mod tests
     fn collection_is_not_empty() -> PureExecutionResult<()>
     {
         assert_eq!(boolean_one(false), is_not_empty(&ZERO_NIL)?);
-        assert_eq!(boolean_one(true), is_not_empty(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(integer(1))?.build()?)?);
+        assert_eq!(boolean_one(true), is_not_empty(&CollectionBuilder::new(Type::Integer, ZERO_MANY).push(2)?.build()?)?);
 
         Ok(())
     }
