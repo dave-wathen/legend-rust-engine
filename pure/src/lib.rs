@@ -1,5 +1,7 @@
 // Copyright 2022 Dave Wathen. All rights reserved.
 
+#![feature(const_type_id)]
+
 pub use crate::data::Collection;
 pub use crate::data::Value;
 pub use crate::data::ZERO_NIL;
@@ -15,9 +17,9 @@ pub use crate::pure_type::Typed;
 
 pub mod data;
 pub mod error;
+pub mod function;
 #[allow(non_camel_case_types)]
 pub mod multiplicity;
-pub mod natives;
 pub mod pure_type;
 
 pub type PureExecutionResult<T> = Result<T, crate::PureExecutionError>;

@@ -46,13 +46,7 @@ impl CharCursor
     /// * `reader` - the UTF-8 resource from which bytes are consumed.
     pub fn open(block_size: usize, capacity: u64, reader: Box<dyn Read>) -> FlatDataResult<CharCursor>
     {
-        let mut buffered_reader = BufferedReader {
-            block_size,
-            capacity,
-            reader,
-            blocks: vec![],
-            end_index: None,
-        };
+        let mut buffered_reader = BufferedReader { block_size, capacity, reader, blocks: vec![], end_index: None };
         let maybe_char = buffered_reader.ensure_char_from(0)?;
         let state = CharCursorState::from(maybe_char, 0);
 
@@ -60,10 +54,7 @@ impl CharCursor
 
         let wrapped = Rc::new(RefCell::new(buffered_reader));
 
-        let mut cursor = CharCursor {
-            reader: Rc::clone(&wrapped),
-            state,
-        };
+        let mut cursor = CharCursor { reader: Rc::clone(&wrapped), state };
 
         if let Some(char) = maybe_char
         {
@@ -109,7 +100,7 @@ impl CharCursor
 
     pub fn advance_to(&mut self, other: &CharCursor) -> FlatDataResult<()>
     {
-        match (&*self).partial_cmp(other)
+        match (*self).partial_cmp(other)
         {
             None => Err(FlatDataError::CursorResourcesDiffer),
             Some(Ordering::Equal) => Ok(()),
@@ -142,10 +133,7 @@ impl CharCursor
         }
     }
 
-    pub fn is_end_of_data(&self) -> bool
-    {
-        matches!(self.state, CharCursorState::End)
-    }
+    pub fn is_end_of_data(&self) -> bool { matches!(self.state, CharCursorState::End) }
 
     pub fn between(&self, other: &CharCursor) -> FlatDataResult<String>
     {
@@ -203,19 +191,13 @@ impl Clone for CharCursor
     {
         self.reader.borrow_mut().add_cursor(self.state);
 
-        CharCursor {
-            reader: Rc::clone(&self.reader),
-            state: self.state,
-        }
+        CharCursor { reader: Rc::clone(&self.reader), state: self.state }
     }
 }
 
 impl Drop for CharCursor
 {
-    fn drop(&mut self)
-    {
-        self.reader.borrow_mut().remove_cursor(self.state);
-    }
+    fn drop(&mut self) { self.reader.borrow_mut().remove_cursor(self.state); }
 }
 
 // BufferedReader holds the on heap data for a resource that is being read by one or more CharCursors.
@@ -398,12 +380,7 @@ impl BufferedReader
         }
         else
         {
-            let block = Block {
-                start_index: previously_read,
-                end_index: previously_read + read as u64,
-                data: buffer,
-                cursor_count: 0,
-            };
+            let block = Block { start_index: previously_read, end_index: previously_read + read as u64, data: buffer, cursor_count: 0 };
 
             self.blocks.push(block);
         }

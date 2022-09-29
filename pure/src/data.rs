@@ -16,34 +16,6 @@ pub enum Value
 
 impl Value
 {
-    pub fn as_bool(&self) -> PureExecutionResult<bool>
-    {
-        match self
-        {
-            Self::Boolean(b) => Ok(*b),
-            _ => Err(crate::PureExecutionError::NotABoolean { found: self.pure_type() }),
-        }
-    }
-
-    pub fn as_i64(&self) -> PureExecutionResult<i64>
-    {
-        match self
-        {
-            Self::Integer(i) => Ok(*i),
-            _ => Err(crate::PureExecutionError::NotAnInteger { found: self.pure_type() }),
-        }
-    }
-
-    pub fn as_f64(&self) -> PureExecutionResult<f64>
-    {
-        match self
-        {
-            Self::Float(f) => Ok(*f),
-            Self::Integer(i) => Ok(*i as f64),
-            _ => Err(crate::PureExecutionError::NotAFloat { found: (*self).pure_type() }),
-        }
-    }
-
     pub fn to_collection(self) -> Collection
     {
         Collection { pure_type: self.pure_type(), multiplicity: PURE_ONE, contents: CollectionContents::One(self) }
@@ -94,6 +66,44 @@ impl_try_from!(u128, Integer, i64);
 impl_from!(f32, Float, f64);
 impl_from!(f64, Float, f64);
 
+macro_rules! impl_try_from_value {
+    ($for:ty, $pure_type:ident) => {
+        impl TryFrom<Value> for $for
+        where
+            $for: ToString,
+        {
+            type Error = PureExecutionError;
+
+            fn try_from(value: Value) -> Result<Self, Self::Error>
+            {
+                match value
+                {
+                    Value::$pure_type(x) => Ok(x),
+                    _ => Err(PureExecutionError::WrongType { expected: Type::$pure_type, found: value.pure_type() }),
+                }
+            }
+        }
+    };
+}
+
+impl_try_from_value!(bool, Boolean);
+impl_try_from_value!(i64, Integer);
+
+impl TryFrom<Value> for f64
+{
+    type Error = PureExecutionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error>
+    {
+        match value
+        {
+            Value::Float(f) => Ok(f),
+            Value::Integer(i) => Ok(i as f64),
+            _ => Err(PureExecutionError::WrongType { expected: Type::Number, found: value.pure_type() }),
+        }
+    }
+}
+
 impl Display for Value
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -125,11 +135,21 @@ pub struct Collection
 {
     pure_type: pure_type::Type,
     multiplicity: multiplicity::Multiplicity,
-    contents: CollectionContents,
+    pub contents: CollectionContents,
 }
 
 impl Collection
 {
+    pub fn zero(pure_type: Type) -> Collection { Collection { pure_type, multiplicity: PURE_ZERO, contents: CollectionContents::Zero } }
+
+    pub fn one<T: TryInto<Value>>(valuable: T) -> PureExecutionResult<Collection>
+    where
+        error::PureExecutionError: std::convert::From<<T as std::convert::TryInto<data::Value>>::Error>,
+    {
+        let value: Value = valuable.try_into()?;
+        Ok(Collection { pure_type: value.pure_type(), multiplicity: PURE_ONE, contents: CollectionContents::One(value) })
+    }
+
     pub fn size(&self) -> PureExecutionResult<Value>
     {
         let result = match &self.contents
@@ -140,82 +160,10 @@ impl Collection
         };
         Ok(result)
     }
-
-    pub fn assume_boolean_one(&self) -> PureExecutionResult<bool>
-    {
-        if let CollectionContents::One(Value::Boolean(b)) = &self.contents
-        {
-            Ok(*b)
-        }
-        else
-        {
-            Err(PureExecutionError::UnexpectedValue { expected: "Boolean[1]".into(), got: self.full_type_as_string() })
-        }
-    }
-
-    pub fn assume_integer_one(&self) -> PureExecutionResult<i64>
-    {
-        if let CollectionContents::One(Value::Integer(i)) = &self.contents
-        {
-            Ok(*i)
-        }
-        else
-        {
-            Err(PureExecutionError::UnexpectedValue { expected: "Integer[1]".into(), got: self.full_type_as_string() })
-        }
-    }
-
-    pub fn assume_float_one(&self) -> PureExecutionResult<f64>
-    {
-        if let CollectionContents::One(Value::Float(f)) = &self.contents
-        {
-            Ok(*f)
-        }
-        else
-        {
-            Err(PureExecutionError::UnexpectedValue { expected: "Float[1]".into(), got: self.full_type_as_string() })
-        }
-    }
-
-    pub fn assume_boolean_many(&self) -> PureExecutionResult<impl Iterator<Item = PureExecutionResult<bool>> + '_>
-    {
-        if self.pure_type() == Type::Integer
-        {
-            Ok(self.into_iter().map(|x| x.as_bool()))
-        }
-        else
-        {
-            Err(PureExecutionError::UnexpectedValue { expected: "Boolean[*]".into(), got: self.full_type_as_string() })
-        }
-    }
-
-    pub fn assume_integer_many(&self) -> PureExecutionResult<impl Iterator<Item = PureExecutionResult<i64>> + '_>
-    {
-        if self.pure_type() == Type::Integer
-        {
-            Ok(self.into_iter().map(|x| x.as_i64()))
-        }
-        else
-        {
-            Err(PureExecutionError::UnexpectedValue { expected: "Integer[*]".into(), got: self.full_type_as_string() })
-        }
-    }
-
-    pub fn assume_float_many(&self) -> PureExecutionResult<impl Iterator<Item = PureExecutionResult<f64>> + '_>
-    {
-        if self.pure_type() == Type::Float
-        {
-            Ok(self.into_iter().map(|x| x.as_f64()))
-        }
-        else
-        {
-            Err(PureExecutionError::UnexpectedValue { expected: "Float[*]".into(), got: self.full_type_as_string() })
-        }
-    }
 }
 
 #[derive(Debug, PartialEq)]
-enum CollectionContents
+pub enum CollectionContents
 {
     Zero,
     One(Value),
@@ -272,21 +220,6 @@ impl<'a> Iterator for Iter<'a>
     }
 }
 
-pub fn boolean_one(from: bool) -> Collection
-{
-    Collection { pure_type: Type::Boolean, multiplicity: PURE_ONE, contents: CollectionContents::One(boolean(from)) }
-}
-
-pub fn integer_one(from: i64) -> Collection
-{
-    Collection { pure_type: Type::Integer, multiplicity: PURE_ONE, contents: CollectionContents::One(from.into()) }
-}
-
-pub fn float_one(from: f64) -> Collection
-{
-    Collection { pure_type: Type::Float, multiplicity: PURE_ONE, contents: CollectionContents::One(float(from)) }
-}
-
 pub struct CollectionBuilder
 {
     collection: Collection,
@@ -313,7 +246,8 @@ impl CollectionBuilder
 
         if let Some(col_max) = self.collection.multiplicity.upper_bound
         {
-            if self.collection.size()?.as_i64()? == col_max
+            let size: i64 = self.collection.size().and_then(|v| v.try_into())?;
+            if size == col_max
             {
                 return Err(PureExecutionError::IllegalMultiplicity { size: col_max + 1, mult: self.collection.multiplicity });
             }
@@ -331,9 +265,10 @@ impl CollectionBuilder
 
     pub fn build(self) -> PureExecutionResult<Collection>
     {
-        if self.collection.size()?.as_i64()? < self.collection.multiplicity.lower_bound
+        let size: i64 = self.collection.size().and_then(|v| v.try_into())?;
+        if size < self.collection.multiplicity.lower_bound
         {
-            return Err(PureExecutionError::IllegalMultiplicity { size: self.collection.size()?.as_i64()?, mult: self.collection.multiplicity });
+            return Err(PureExecutionError::IllegalMultiplicity { size, mult: self.collection.multiplicity });
         }
         Ok(self.collection)
     }
@@ -349,9 +284,9 @@ mod tests
     #[test]
     fn boolean_value() -> PureExecutionResult<()>
     {
-        let b: Value = boolean(true);
+        let b: Value = true.into();
         assert_eq!(pure_type::Type::Boolean, b.pure_type());
-        assert!(b.as_bool()?);
+        assert!(b.try_into()?);
         Ok(())
     }
 
@@ -360,17 +295,17 @@ mod tests
     {
         let i: Value = 42.into();
         assert_eq!(pure_type::Type::Integer, i.pure_type());
-        assert_eq!(42_i64, i.as_i64()?);
-        assert_eq!(42.0, i.as_f64()?);
+        assert_eq!(42_i64, i.clone().try_into()?);
+        assert_eq!(42.0, <Value as TryInto<f64>>::try_into(i)?);
         Ok(())
     }
 
     #[test]
     fn float_value() -> PureExecutionResult<()>
     {
-        let i: Value = float(4.2);
-        assert_eq!(pure_type::Type::Float, i.pure_type());
-        assert_eq!(4.2, i.as_f64()?);
+        let f: Value = 4.2.into();
+        assert_eq!(pure_type::Type::Float, f.pure_type());
+        assert_eq!(4.2, <Value as TryInto<f64>>::try_into(f)?);
         Ok(())
     }
 
@@ -378,7 +313,8 @@ mod tests
     fn build_empty_nil() -> PureExecutionResult<()>
     {
         let empty = CollectionBuilder::new(Type::Nil, PURE_ZERO).build()?;
-        assert_eq!(0, empty.size()?.as_i64()?);
+        let size: i64 = empty.size().and_then(|v| v.try_into())?;
+        assert_eq!(0, size);
         assert_eq!(pure_type::Type::Nil, empty.pure_type());
         assert_eq!(None, (&empty).into_iter().next());
 
@@ -389,7 +325,8 @@ mod tests
     fn build_empty_integer() -> PureExecutionResult<()>
     {
         let empty = CollectionBuilder::new(Type::Integer, PURE_ZERO).build()?;
-        assert_eq!(0, empty.size()?.as_i64()?);
+        let size: i64 = empty.size().and_then(|v| v.try_into())?;
+        assert_eq!(0, size);
         assert_eq!(pure_type::Type::Integer, empty.pure_type());
         assert_eq!(None, (&empty).into_iter().next());
 
@@ -400,7 +337,8 @@ mod tests
     fn build_one_integer() -> PureExecutionResult<()>
     {
         let one = CollectionBuilder::new(Type::Integer, PURE_ONE).push(2)?.build()?;
-        assert_eq!(1, one.size()?.as_i64()?);
+        let size: i64 = one.size().and_then(|v| v.try_into())?;
+        assert_eq!(1, size);
         assert_eq!(pure_type::Type::Integer, one.pure_type());
 
         let mut iter = (&one).into_iter();
@@ -420,7 +358,8 @@ mod tests
         }
         let many = builder.build()?;
 
-        assert_eq!(50, many.size()?.as_i64()?);
+        let size: i64 = many.size().and_then(|v| v.try_into())?;
+        assert_eq!(50, size);
         assert_eq!(pure_type::Type::Integer, many.pure_type());
 
         let mut iter = (&many).into_iter();
@@ -438,12 +377,13 @@ mod tests
     {
         let numbers = CollectionBuilder::new(Type::Number, ZERO_MANY).push(1_usize)?.push(2.0)?.build()?;
 
-        assert_eq!(2, numbers.size()?.as_i64()?);
+        let size: i64 = numbers.size().and_then(|v| v.try_into())?;
+        assert_eq!(2, size);
         assert_eq!(pure_type::Type::Number, numbers.pure_type());
 
         let mut iter = (&numbers).into_iter();
         assert_eq!(Some(&1.into()), iter.next());
-        assert_eq!(Some(&float(2.0)), iter.next());
+        assert_eq!(Some(&2.0.into()), iter.next());
         assert_eq!(None, iter.next());
 
         Ok(())

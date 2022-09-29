@@ -1,5 +1,6 @@
 // Copyright 2022 Dave Wathen. All rights reserved.
 
+use std::any::TypeId;
 use std::fmt;
 
 pub const PRIMITIVES: [Type; 12] = [
@@ -46,6 +47,23 @@ pub enum Type
 }
 
 const REL_ANY: TypeRelation = TypeRelation::Type(Type::Any);
+
+pub const fn pure_type_of<T: 'static>() -> Type
+{
+    const ID_BOOL: TypeId = TypeId::of::<bool>();
+    const ID_I64: TypeId = TypeId::of::<i64>();
+    const ID_F64: TypeId = TypeId::of::<f64>();
+    const ID_STRING: TypeId = TypeId::of::<String>();
+
+    match TypeId::of::<T>()
+    {
+        ID_BOOL => Type::Boolean,
+        ID_I64 => Type::Integer,
+        ID_F64 => Type::Float,
+        ID_STRING => Type::String,
+        _ => Type::Any,
+    }
+}
 
 impl Type
 {
@@ -169,6 +187,11 @@ impl fmt::Display for Type
 pub trait Typed
 {
     fn pure_type(&self) -> Type;
+}
+
+impl Typed for bool
+{
+    fn pure_type(&self) -> Type { Type::Boolean }
 }
 
 #[cfg(test)]

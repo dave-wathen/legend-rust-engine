@@ -20,7 +20,7 @@ pub enum PureExecutionError
     #[error("Invalid argument passed to arg {arg} of {func}: {cause}")]
     IllegalArgument
     {
-        func: &'static str, arg: usize, cause: String
+        func: String, arg: usize, cause: String
     },
     #[error("Illegal assignment: {from} value cannot be assigned to {to}")]
     IllegalAssignment
@@ -36,6 +36,11 @@ pub enum PureExecutionError
     IllegalValue
     {
         pure_type: Type, value: String
+    },
+    #[error("Values ois of the wrong type: expected {expected}, found: {found}")]
+    WrongType
+    {
+        expected: Type, found: Type
     },
     #[error("Expected a Boolean value but got a {found}")]
     NotABoolean
