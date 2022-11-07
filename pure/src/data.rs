@@ -4,6 +4,8 @@ use std::fmt::Display;
 
 use crate::{pure_type::Typed, *};
 
+pub mod model;
+
 pub const ZERO_NIL: Collection = Collection { pure_type: Type::Nil, multiplicity: PURE_ZERO, contents: CollectionContents::Zero };
 
 #[derive(Debug, PartialEq, Clone)]

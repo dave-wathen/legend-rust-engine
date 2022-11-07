@@ -57,6 +57,16 @@ pub enum PureExecutionError
     {
         found: Type
     },
+    #[error("DuplicateElementName: {name}")]
+    DuplicateElementName
+    {
+        name: String
+    },
+    #[error("UnexpectedError: {problem}")]
+    UnexpectedError
+    {
+        problem: &'static str
+    },
     #[error("Infallible")]
     Infallible(#[from] std::convert::Infallible),
 }
