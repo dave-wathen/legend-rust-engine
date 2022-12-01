@@ -1,3 +1,6 @@
 [workspace]
 
-members = ["engine", "pure", "xt_flatdata"]
+members = ["engine", "pure", "xt_flatdata", "precursor"]
+
+[workspace.dependencies]
+thiserror = "1.0.30"
