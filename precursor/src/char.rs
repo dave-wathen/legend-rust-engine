@@ -147,73 +147,14 @@ mod testing
 
                 Ok(())
             }
-
-            //     // TODO COW for between?
-
-            //     #[test]
-            //     fn can_match_sequences() -> ScanResult<()>
-            //     {
-            //         let d: MatchableSequence = 'd'.into();
-            //         let e: MatchableSequence = 'e'.into();
-            //         let h: MatchableSequence = 'H'.into();
-            //         let doh: MatchableSequence = "doh".into();
-            //         let hello: MatchableSequence = "Hello".into();
-            //         let empty: MatchableSequence = "".into();
-
-            //         let mut cursor = $factory("Hello, World");
-            //         // Hello, World
-            //         // ^
-            //         assert!(cursor.matches(&h)?);
-            //         assert!(cursor.matches(&hello)?);
-            //         assert!(!cursor.matches(&e)?);
-            //         assert!(cursor.matches(&empty)?);
-
-            //         cursor.advance()?;
-            //         // Hello, World
-            //         //  ^
-            //         assert!(!cursor.matches(&h)?);
-            //         assert!(!cursor.matches(&hello)?);
-            //         assert!(cursor.matches(&e)?);
-            //         assert!(cursor.matches(&empty)?);
-
-            //         // Hello, World
-            //         //            ^
-            //         cursor.advance_many(10)?;
-            //         assert!(cursor.matches(&d)?);
-            //         assert!(!cursor.matches(&doh)?);
-            //         assert!(cursor.matches(&empty)?);
-
-            //         // Hello, World
-            //         //             ^
-            //         cursor.advance()?;
-            //         assert!(!cursor.matches(&d)?);
-            //         assert!(!cursor.matches(&doh)?);
-            //         assert!(!cursor.matches(&empty)?);
-
-            //         Ok(())
-            //     }
-
-            //     #[test]
-            //     fn can_match_sequence_and_advance() -> ScanResult<()>
-            //     {
-            //         let hello: MatchableSequence = "Hello".into();
-
-            //         let mut cursor = $factory("Hello, World");
-            //         // Hello, World
-            //         // ^
-            //         cursor.advance_if_matches(&hello)?;
-            //         // Hello, World
-            //         //      ^
-            //         assert_eq!(Token::Char(','), cursor.token()?);
-
-            //         Ok(())
-            //     }
         };
     }
 }
 
+mod regex;
 mod utf8;
 
+pub use regex::{Regex, RegexError, RegexResult};
 pub use utf8::Utf8CharCursor;
 
 /// A `CharCursor` represents a character position in a some resource (represented by a [precursor::byte::ByteCursor]).

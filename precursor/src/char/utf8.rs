@@ -99,42 +99,6 @@ impl<'data, BC: ByteCursor<'data>> CharCursor<'data> for Utf8CharCursor<'data, B
             },
         }
     }
-
-    // fn matches(&self, seq: &crate::MatchableSequence) -> ScanResult<bool>
-    // {
-    //     if seq.is_empty()
-    //     {
-    //         Ok(self.token_at(self.offset)? != (Token::EndOfData, 0))
-    //     }
-    //     else if let MatchableSequence::Char(expected) = seq
-    //     {
-    //         match self.token_at(self.offset)
-    //         {
-    //             Ok((Token::Char(actual), _)) => Ok(actual == *expected),
-    //             Err(e) => Err(e),
-    //             _ => Ok(false),
-    //         }
-    //     }
-    //     else if let MatchableSequence::MultiChar(multi) = seq
-    //     {
-    //         let mut pos = self.offset;
-    //         for expected in multi
-    //         {
-    //             let (actual, width) = self.token_at(pos)?;
-    //             if Token::Char(*expected) != actual
-    //             {
-    //                 return Ok(false);
-    //             }
-    //             pos += width;
-    //         }
-    //         Ok(true)
-    //     }
-    //     else
-    //     {
-    //         // Should not reach here as MatchableSequence::Empty should always return true for is_empty() above
-    //         Ok(false)
-    //     }
-    // }
 }
 
 fn char_token<'data, BC: ByteCursor<'data>>(start: &BC) -> CursorResult<(CharToken, BC)>
