@@ -14,6 +14,71 @@ pub struct Regex
     states: Vec<State>,
 }
 
+type CharRange = (char, char);
+
+#[derive(Debug)]
+enum State
+{
+    Alternation(Vec<usize>),
+    Char(char, usize),
+    Class(Vec<CharRange>, usize),
+    Terminal,
+}
+
+impl Regex
+{
+    pub fn new(re: &str) -> RegexResult<Regex>
+    {
+        let parsed = regex_syntax::Parser::new().parse(re).map_err(|e| RegexError::Syntax { error: format!("{}", e) })?;
+        dbg!(&parsed);
+        compile(&parsed)
+    }
+
+    pub fn matches<'a, C>(&self, cursor: &C) -> RegexResult<bool>
+    where
+        C: CharCursor<'a> + std::fmt::Debug,
+    {
+        let cursor = cursor.clone();
+        let mut stack = vec![(&self.states[0], cursor)];
+
+        while !stack.is_empty()
+        {
+            let (state, mut cursor) = stack.pop().unwrap();
+            dbg!(state);
+            dbg!(&cursor);
+
+            match state
+            {
+                State::Alternation(options) => options.iter().rev().for_each(|o| stack.push((&self.states[*o], cursor.clone()))),
+                State::Char(expected, next) =>
+                {
+                    if let CharToken::Char(ch) = cursor.token()?
+                    {
+                        if ch == *expected
+                        {
+                            cursor.advance()?;
+                            stack.push((&self.states[*next], cursor));
+                        }
+                    }
+                }
+                State::Class(ranges, next) =>
+                {
+                    if let CharToken::Char(ch) = cursor.token()?
+                    {
+                        if ranges.iter().any(|r| r.0 <= ch && ch <= r.1)
+                        {
+                            cursor.advance()?;
+                            stack.push((&self.states[*next], cursor));
+                        }
+                    }
+                }
+                State::Terminal => return Ok(true),
+            }
+        }
+        Ok(false)
+    }
+}
+
 impl std::fmt::Debug for Regex
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -27,7 +92,6 @@ impl std::fmt::Debug for Regex
             else
             {
                 format!("u{:x}", ch as i32)
-                //                ch.escape_unicode().to_string()
             }
         }
 
@@ -37,105 +101,40 @@ impl std::fmt::Debug for Regex
         {
             match state
             {
-                State::Terminal => writeln!(f, "    {:04}:         end", state_index)?,
-                _ =>
+                State::Terminal => writeln!(f, "    {:04} END:", state_index)?,
+                State::Alternation(options) =>
                 {
-                    let mut first = true;
-                    for t in state
+                    writeln!(f, "    {:04} ALT: -> {:04}", state_index, options[0])?;
+                    for o in &options[1..]
                     {
-                        let id = if first { format!("{:04}", state_index) } else { "    ".to_owned() };
-
-                        match t
-                        {
-                            Transition::Char(ch, next) => writeln!(f, "    {}: -> {:04} if '{}'", id, next, format_char(*ch))?,
-                            Transition::Class(ranges, next) =>
-                            {
-                                write!(f, "    {}: -> {:04} if in ", id, next)?;
-                                for (tr_index, tr) in ranges.iter().enumerate()
-                                {
-                                    if tr_index > 0 && tr_index % 8 == 0
-                                    {
-                                        writeln!(f)?;
-                                        write!(f, "                        ")?;
-                                    }
-                                    let range_text = format!("{}-{}", format_char(tr.0), format_char(tr.1));
-                                    write!(f, "{:18}", range_text)?;
-                                }
-
-                                writeln!(f)?
-                            }
-                            Transition::Epsilon(next) => writeln!(f, "    {}: -> {:04} always", id, next)?,
-                        };
-
-                        first = false;
+                        writeln!(f, "            : -> {:04}", o)?;
                     }
+                }
+                State::Char(expected, next) =>
+                {
+                    writeln!(f, "    {:04} CHR: -> {:04} if {}", state_index, next, format_char(*expected))?;
+                }
+                State::Class(ranges, next) =>
+                {
+                    write!(f, "    {:04} CLS: -> {:04} if in ", state_index, next)?;
+                    for (tr_index, tr) in ranges.iter().enumerate()
+                    {
+                        if tr_index > 0 && tr_index % 8 == 0
+                        {
+                            writeln!(f)?;
+                            write!(f, "                            ")?;
+                        }
+                        let range_text = format!("{}-{}", format_char(tr.0), format_char(tr.1));
+                        write!(f, "{:18}", range_text)?;
+                    }
+
+                    writeln!(f)?
                 }
             };
         }
         writeln!(f, ")")?;
         Ok(())
     }
-}
-
-#[derive(Debug)]
-enum State
-{
-    Terminal,
-    OneTransition(Transition),
-    MultiTransition(Vec<Transition>),
-}
-
-impl State
-{
-    fn is_terminal(&self) -> bool { matches!(self, State::Terminal) }
-}
-
-impl<'a> std::iter::IntoIterator for &'a State
-{
-    type Item = &'a Transition;
-    type IntoIter = StateIter<'a>;
-
-    fn into_iter(self) -> Self::IntoIter
-    {
-        match &self
-        {
-            State::Terminal => StateIter::None,
-            State::OneTransition(one) => StateIter::Single(std::iter::once(one)),
-            State::MultiTransition(many) => StateIter::Many(many.iter()),
-        }
-    }
-}
-
-pub enum StateIter<'a>
-{
-    None,
-    Single(std::iter::Once<&'a Transition>),
-    Many(std::slice::Iter<'a, Transition>),
-}
-
-impl<'a> Iterator for StateIter<'a>
-{
-    type Item = &'a Transition;
-
-    fn next(&mut self) -> Option<Self::Item>
-    {
-        match self
-        {
-            StateIter::None => None,
-            StateIter::Single(iter) => iter.next(),
-            StateIter::Many(iter) => iter.next(),
-        }
-    }
-}
-
-type CharRange = (char, char);
-
-#[derive(Debug)]
-pub enum Transition
-{
-    Char(char, usize),
-    Class(Vec<CharRange>, usize),
-    Epsilon(usize),
 }
 
 #[derive(Error, Debug)]
@@ -153,65 +152,6 @@ pub enum RegexError
     {
         error: String
     },
-}
-
-impl Regex
-{
-    pub fn new(re: &str) -> RegexResult<Regex>
-    {
-        let parsed = regex_syntax::Parser::new().parse(re).map_err(|e| RegexError::Syntax { error: format!("{}", e) })?;
-        dbg!(&parsed);
-        compile(&parsed)
-    }
-
-    pub fn matches<'a, C>(&self, cursor: &C) -> RegexResult<bool>
-    where
-        C: CharCursor<'a>,
-    {
-        let mut stack = vec![&self.states[0]];
-        let mut cursor = cursor.clone();
-
-        while !stack.is_empty()
-        {
-            let state = stack.pop().unwrap();
-
-            if state.is_terminal()
-            {
-                return Ok(true);
-            }
-
-            for t in state
-            {
-                match t
-                {
-                    Transition::Char(expected, next) =>
-                    {
-                        if let CharToken::Char(ch) = cursor.token()?
-                        {
-                            if ch == *expected
-                            {
-                                stack.push(&self.states[*next]);
-                                cursor.advance()?;
-                            }
-                        }
-                    }
-                    Transition::Class(ranges, next) =>
-                    {
-                        if let CharToken::Char(ch) = cursor.token()?
-                        {
-                            if ranges.iter().any(|r| r.0 <= ch && ch <= r.1)
-                            {
-                                stack.push(&self.states[*next]);
-                                cursor.advance()?;
-                            }
-                        }
-                    }
-                    Transition::Epsilon(next) => stack.push(&self.states[*next]),
-                };
-            }
-        }
-        Ok(false)
-    }
 }
 
 fn compile(hir: &Hir) -> RegexResult<Regex>
@@ -236,14 +176,14 @@ fn add_states(hir: &Hir, regex: &mut Regex) -> RegexResult<()>
                 Literal::Byte(b) if b <= 0x7F => b as char,
                 Literal::Byte(_) => return Err(RegexError::Unsupported { error: "Only unicode matching is supported (illegal char)" }),
             };
-            regex.states.push(State::OneTransition(Transition::Char(char, regex.states.len() + 1)));
+            regex.states.push(State::Char(char, regex.states.len() + 1));
         }
         regex_syntax::hir::HirKind::Class(class) => match class
         {
             regex_syntax::hir::Class::Unicode(uc) =>
             {
                 let ranges: Vec<CharRange> = uc.iter().map(|ur| (ur.start(), ur.end())).collect();
-                regex.states.push(State::OneTransition(Transition::Class(ranges, regex.states.len() + 1)));
+                regex.states.push(State::Class(ranges, regex.states.len() + 1));
             }
             regex_syntax::hir::Class::Bytes(cb) =>
             {
@@ -252,7 +192,7 @@ fn add_states(hir: &Hir, regex: &mut Regex) -> RegexResult<()>
                     return Err(RegexError::Unsupported { error: "Only unicode matching is supported (illegal range)" });
                 }
                 let ranges: Vec<CharRange> = cb.iter().map(|br| (br.start() as char, br.end() as char)).collect();
-                regex.states.push(State::OneTransition(Transition::Class(ranges, regex.states.len() + 1)));
+                regex.states.push(State::Class(ranges, regex.states.len() + 1));
             }
         },
         regex_syntax::hir::HirKind::Anchor(_) => todo!(),
@@ -277,7 +217,7 @@ fn add_states(hir: &Hir, regex: &mut Regex) -> RegexResult<()>
             let mut ends = Vec::with_capacity(hirs.len());
             for hir in hirs
             {
-                root_trans.push(Transition::Epsilon(regex.states.len()));
+                root_trans.push(regex.states.len());
                 add_states(hir, regex)?;
                 ends.push(regex.states.len() - 1);
             }
@@ -290,7 +230,7 @@ fn add_states(hir: &Hir, regex: &mut Regex) -> RegexResult<()>
             }
 
             // Replace the paceholder
-            regex.states[root_placeholder] = State::MultiTransition(root_trans);
+            regex.states[root_placeholder] = State::Alternation(root_trans);
         }
     };
     Ok(())
@@ -298,18 +238,12 @@ fn add_states(hir: &Hir, regex: &mut Regex) -> RegexResult<()>
 
 fn adjust_state_transitions(state: &State, to: usize) -> State
 {
-    let map_transition = |t: &Transition| match t
-    {
-        Transition::Char(char, _) => Transition::Char(*char, to),
-        Transition::Class(ranges, _) => Transition::Class(ranges.clone(), to),
-        Transition::Epsilon(_) => Transition::Epsilon(to),
-    };
-
     match state
     {
-        State::Terminal => State::Terminal,
-        State::OneTransition(t) => State::OneTransition(map_transition(t)),
-        State::MultiTransition(ts) => State::MultiTransition(ts.iter().map(map_transition).collect()),
+        State::Terminal => panic!("Terminal should not be adjusted"),
+        State::Alternation(_) => panic!("Alternation should not be adjusted"),
+        State::Char(expected, _) => State::Char(*expected, to),
+        State::Class(ranges, _) => State::Class(ranges.clone(), to),
     }
 }
 
@@ -434,6 +368,20 @@ mod tests
         // -aby
         //     ^
         assert!(!re.matches(&cursor)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn alternative_causing_backtracking() -> RegexResult<()>
+    {
+        let re = Regex::new(r"aa|ab")?;
+
+        let bytes = ByteArrayCursor::new(b"ab");
+        let cursor = Utf8CharCursor::new(bytes);
+        // ab
+        // ^
+        assert!(re.matches(&cursor)?);
 
         Ok(())
     }
