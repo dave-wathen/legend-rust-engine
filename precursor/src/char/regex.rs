@@ -115,7 +115,6 @@ pub struct Regex
 {
     classes: Classes,
     alternatives: Alternatives,
-    repetitions: Repetitions,
     states: States,
 }
 
@@ -124,7 +123,6 @@ impl Regex
     pub fn new(re: &str) -> RegexResult<Regex>
     {
         let parsed = regex_syntax::Parser::new().parse(re).map_err(|e| RegexError::Syntax { error: format!("{}", e) })?;
-        // dbg!(&parsed);
         compile(&parsed)
     }
 
@@ -133,19 +131,18 @@ impl Regex
         C: CharCursor<'a> + std::fmt::Debug,
     {
         let cursor = cursor.clone();
-        let mut stack = vec![(self.states[StateId(0)], cursor, 0)];
+        let mut stack = vec![(self.states[StateId(0)], cursor)];
 
         while !stack.is_empty()
         {
-            let (state, mut cursor, repeated) = stack.pop().unwrap();
-            dbg!((state, cursor.byte_index(), repeated));
+            let (state, mut cursor) = stack.pop().unwrap();
 
             match state
             {
                 State::Alternation(id) =>
                 {
                     let options = &self.alternatives[id];
-                    options.iter().rev().for_each(|o| stack.push((self.states[*o], cursor.clone(), repeated)))
+                    options.iter().rev().for_each(|o| stack.push((self.states[*o], cursor.clone())))
                 }
                 State::Char(expected, next) =>
                 {
@@ -154,7 +151,7 @@ impl Regex
                         if ch == expected
                         {
                             cursor.advance()?;
-                            stack.push((self.states[next], cursor, repeated));
+                            stack.push((self.states[next], cursor));
                         }
                     }
                 }
@@ -165,42 +162,11 @@ impl Regex
                         if self.classes[id].includes(ch)
                         {
                             cursor.advance()?;
-                            stack.push((self.states[next], cursor, repeated));
+                            stack.push((self.states[next], cursor));
                         }
                     }
                 }
-                State::NoOp(next) => stack.push((self.states[next], cursor, repeated)),
-                State::RepetitionInit(next, _) =>
-                {
-                    stack.push((self.states[next], cursor, 0));
-                }
-                State::RepetitionStart(run, skip, rep) =>
-                {
-                    let repetition = self.repetitions[rep];
-                    if repeated < repetition.min
-                    {
-                        stack.push((self.states[run], cursor, repeated));
-                    }
-                    else if repeated >= repetition.max
-                    {
-                        stack.push((self.states[skip], cursor, repeated));
-                    }
-                    else if repetition.greedy
-                    {
-                        stack.push((State::NoOp(skip), cursor.clone(), repeated));
-                        stack.push((self.states[run], cursor, repeated));
-                    }
-                    else
-                    {
-                        stack.push((State::NoOp(run), cursor.clone(), repeated));
-                        stack.push((self.states[skip], cursor, repeated));
-                    }
-                }
-                State::RepetitionEnd(start, _) =>
-                {
-                    let repeated = repeated + 1;
-                    stack.push((self.states[start], cursor, repeated));
-                }
+                State::NoOp(next) => stack.push((self.states[next], cursor)),
                 State::Terminal => return Ok(true),
             }
         }
@@ -215,9 +181,6 @@ enum State
     Char(char, StateId),
     Class(ClassId, StateId),
     NoOp(StateId),
-    RepetitionInit(StateId, RepetitionId),
-    RepetitionStart(StateId, StateId, RepetitionId),
-    RepetitionEnd(StateId, RepetitionId),
     Terminal,
 }
 
@@ -241,9 +204,6 @@ impl std::fmt::Debug for State
                 write!(f, "CLASS: {} if in {:?} ", next, id)?;
             }
             Self::NoOp(next) => write!(f, "NO_OP: {}", next)?,
-            State::RepetitionInit(next, rep) => write!(f, "{} INIT: {}", rep, next)?,
-            State::RepetitionStart(run, skip, rep) => write!(f, "{} START: run loop {} or skip loop {}", rep, run, skip)?,
-            State::RepetitionEnd(start, rep) => write!(f, "{} END: starts at {}", rep, start)?,
         };
 
         Ok(())
@@ -334,41 +294,6 @@ impl std::fmt::Debug for CharRange
 
 display_as_debug_for!(CharRange);
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct Repetition
-{
-    min: usize,
-    max: usize,
-    greedy: bool,
-}
-
-impl std::fmt::Debug for Repetition
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-    {
-        let aggression = if self.greedy { "greedy" } else { "lazy" };
-        if self.max == usize::MAX
-        {
-            write!(f, "'{}..* {}'", self.min, aggression)
-        }
-        else
-        {
-            write!(f, "'{}..{} {}'", self.min, self.max, aggression)
-        }
-    }
-}
-
-display_as_debug_for!(Repetition);
-
-id_type!(RepetitionId);
-
-impl std::fmt::Debug for RepetitionId
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "Rep-{}", self.0) }
-}
-
-type Repetitions = IndexedCollection<RepetitionId, Repetition>;
-
 #[derive(Error, Debug)]
 pub enum RegexError
 {
@@ -388,10 +313,9 @@ pub enum RegexError
 
 fn compile(hir: &Hir) -> RegexResult<Regex>
 {
-    let mut regex = Regex { classes: Classes::new(), alternatives: Alternatives::new(), repetitions: Repetitions::new(), states: States::new() };
+    let mut regex = Regex { classes: Classes::new(), alternatives: Alternatives::new(), states: States::new() };
     add_states(hir, &mut regex)?;
     regex.states.push(State::Terminal);
-    dbg!(&regex);
     Ok(regex)
 }
 
@@ -438,29 +362,66 @@ fn add_states(hir: &Hir, regex: &mut Regex) -> RegexResult<()>
         {
             let (min, max) = match &repeat.kind
             {
-                regex_syntax::hir::RepetitionKind::ZeroOrOne => (0, 1),
-                regex_syntax::hir::RepetitionKind::ZeroOrMore => (0, usize::MAX),
-                regex_syntax::hir::RepetitionKind::OneOrMore => (1, usize::MAX),
+                regex_syntax::hir::RepetitionKind::ZeroOrOne => (0, Some(1)),
+                regex_syntax::hir::RepetitionKind::ZeroOrMore => (0, None),
+                regex_syntax::hir::RepetitionKind::OneOrMore => (1, None),
                 regex_syntax::hir::RepetitionKind::Range(range) => match range
                 {
-                    regex_syntax::hir::RepetitionRange::Exactly(n) => (*n as usize, *n as usize),
-                    regex_syntax::hir::RepetitionRange::AtLeast(n) => (*n as usize, usize::MAX),
-                    regex_syntax::hir::RepetitionRange::Bounded(m, n) => (*m as usize, *n as usize),
+                    regex_syntax::hir::RepetitionRange::Exactly(n) => (*n as usize, Some(*n as usize)),
+                    regex_syntax::hir::RepetitionRange::AtLeast(n) => (*n as usize, None),
+                    regex_syntax::hir::RepetitionRange::Bounded(m, n) => (*m as usize, Some(*n as usize)),
                 },
             };
 
-            let repetition = Repetition { min, max, greedy: repeat.greedy };
-            let rep_id = regex.repetitions.push(repetition);
-            let repeat_start = regex.states.relative_id(2);
-            let repeat_run = regex.states.relative_id(3);
-            regex.states.push(State::RepetitionInit(repeat_start, rep_id));
-            // Start is a placeholder for now as skip needs updating
-            regex.states.push(State::RepetitionStart(repeat_run, repeat_run, rep_id));
-            add_states(repeat.hir.as_ref(), regex)?;
-            regex.states.push(State::RepetitionEnd(repeat_start, rep_id));
+            for _ in 0..min
+            {
+                add_states(repeat.hir.as_ref(), regex)?;
+            }
 
-            // Update the Start to point skip to the next
-            regex.states[repeat_start] = State::RepetitionStart(repeat_run, regex.states.next_id(), rep_id);
+            if let Some(mx) = max
+            {
+                for _ in (min + 1)..=mx
+                {
+                    let id = regex.alternatives.push(Vec::with_capacity(2));
+                    regex.states.push(State::Alternation(id));
+
+                    let next = regex.states.next_id();
+                    add_states(repeat.hir.as_ref(), regex)?;
+                    let skip = regex.states.next_id();
+
+                    if repeat.greedy
+                    {
+                        regex.alternatives[id].push(next);
+                        regex.alternatives[id].push(skip);
+                    }
+                    else
+                    {
+                        regex.alternatives[id].push(skip);
+                        regex.alternatives[id].push(next);
+                    }
+                }
+            }
+            else
+            {
+                let id = regex.alternatives.push(Vec::with_capacity(2));
+                let alt_id = regex.states.push(State::Alternation(id));
+
+                let next = regex.states.next_id();
+                add_states(repeat.hir.as_ref(), regex)?;
+                regex.states.push(State::NoOp(alt_id));
+                let skip = regex.states.next_id();
+
+                if repeat.greedy
+                {
+                    regex.alternatives[id].push(next);
+                    regex.alternatives[id].push(skip);
+                }
+                else
+                {
+                    regex.alternatives[id].push(skip);
+                    regex.alternatives[id].push(next);
+                }
+            }
         }
         regex_syntax::hir::HirKind::Group(group) =>
         {
@@ -647,6 +608,28 @@ mod tests
     }
 
     #[test]
+    fn greedy_optional() -> RegexResult<()>
+    {
+        let re = Regex::new(r"a?b")?;
+        match_ok(&re, "ab")?;
+        match_ok(&re, "b")?;
+        match_fails(&re, "x")?;
+        match_fails(&re, "")?;
+        Ok(())
+    }
+
+    #[test]
+    fn lazy_optional() -> RegexResult<()>
+    {
+        let re = Regex::new(r"a??b")?;
+        match_ok(&re, "ab")?;
+        match_ok(&re, "b")?;
+        match_fails(&re, "x")?;
+        match_fails(&re, "")?;
+        Ok(())
+    }
+
+    #[test]
     fn exact_repetition() -> RegexResult<()>
     {
         let re = Regex::new(r"a{3}b")?;
@@ -735,10 +718,16 @@ mod tests
         Ok(())
     }
 
+    #[test]
+    fn nested_repetitions() -> RegexResult<()>
+    {
+        let re = Regex::new(r"(((a|b)*c){3,6}d){2}")?;
+        match_ok(&re, "aaaaaaaaaaaaaaaaaabbbcabacacdcccccd")?;
+        Ok(())
+    }
+
     fn match_ok(re: &Regex, data: &str) -> RegexResult<()>
     {
-        dbg!(re);
-        dbg!(data);
         assert!(do_match(re, data)?);
         Ok(())
     }
