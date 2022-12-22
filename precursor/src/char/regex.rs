@@ -126,7 +126,7 @@ impl Regex
         compile(&parsed)
     }
 
-    pub fn matches<'a, C>(&self, cursor: &C) -> RegexResult<bool>
+    pub fn matches<'a, C>(&self, cursor: &C) -> RegexResult<Match<'a, C>>
     where
         C: CharCursor<'a> + std::fmt::Debug,
     {
@@ -167,11 +167,27 @@ impl Regex
                     }
                 }
                 State::NoOp(next) => stack.push((self.states[next], cursor)),
-                State::Terminal => return Ok(true),
+                State::Terminal => return Ok(Match { matched_cursor: Some(cursor), phantom: PhantomData }),
             }
         }
-        Ok(false)
+        Ok(Match { matched_cursor: None, phantom: PhantomData })
     }
+}
+
+pub struct Match<'a, C>
+where
+    C: CharCursor<'a>,
+{
+    matched_cursor: Option<C>,
+    phantom: PhantomData<&'a C>,
+}
+
+impl<'a, C> Match<'a, C>
+where
+    C: CharCursor<'a>,
+{
+    pub fn is_match(&self) -> bool { matches!(self.matched_cursor, Some(_)) }
+    pub fn is_not_match(&self) -> bool { matches!(self.matched_cursor, None) }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -741,7 +757,7 @@ mod tests
     fn do_match(re: &Regex, data: &str) -> RegexResult<bool>
     {
         let bytes = ByteArrayCursor::new(data.as_bytes());
-        let cursor = Utf8CharCursor::new(bytes);
-        re.matches(&cursor)
+        let cursor = Utf8CharCursor::new(bytes, crate::char::LineEndings::Smart);
+        Ok(re.matches(&cursor)?.is_match())
     }
 }
