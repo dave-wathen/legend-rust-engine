@@ -7,7 +7,7 @@ use crate::{
     CursorError, CursorResult,
 };
 
-use super::{CharCursor, CharToken, EndOfLine, LineEndings, Location};
+use super::{CharCursor, CharToken, EndOfLine, LineEndings, Location, Span};
 
 const INVALID_UTF8: CursorError = CursorError::InvalidData("Invalid UTF8 encoding");
 const INVALID_UTF8_EOD: CursorError = CursorError::InvalidData("Invalid UTF8 encoding (unexpected end of data)");
@@ -21,6 +21,7 @@ pub struct Utf8CharCursor<'data, BC: ByteCursor<'data>>
     char_offset: usize,
     line_number: usize,
     line_start_char_offset: usize,
+    last_line_eof_column: usize,
     phantom: PhantomData<&'data usize>,
 }
 
@@ -29,7 +30,15 @@ impl<'data, BC: ByteCursor<'data>> Utf8CharCursor<'data, BC>
     /// Creates a `Utf8CharCursor`.
     pub fn new(bytes: BC, line_endings: LineEndings) -> Utf8CharCursor<'data, BC>
     {
-        Utf8CharCursor { bytes, line_endings, char_offset: 0, line_number: 1, line_start_char_offset: 0, phantom: PhantomData }
+        Utf8CharCursor {
+            bytes,
+            line_endings,
+            char_offset: 0,
+            line_number: 1,
+            line_start_char_offset: 0,
+            last_line_eof_column: 0,
+            phantom: PhantomData,
+        }
     }
 
     fn char_token(&self) -> CursorResult<(CharToken, BC)>
@@ -141,6 +150,22 @@ impl<'data, BC: ByteCursor<'data>> Utf8CharCursor<'data, BC>
             }
         }
     }
+
+    fn prior_location(&self) -> Option<Location>
+    {
+        if self.char_offset == 0
+        {
+            None
+        }
+        else if self.line_start_char_offset == self.char_offset
+        {
+            Some(Location::new(self.char_offset - 1, self.line_number - 1, self.last_line_eof_column))
+        }
+        else
+        {
+            Some(Location::new(self.char_offset - 1, self.line_number, self.char_offset - self.line_start_char_offset))
+        }
+    }
 }
 
 impl<'data, BC: ByteCursor<'data>> PartialOrd for Utf8CharCursor<'data, BC>
@@ -158,6 +183,7 @@ impl<'data, BC: ByteCursor<'data>> CharCursor<'data> for Utf8CharCursor<'data, B
             CharToken::Char(_) => self.char_offset += 1,
             CharToken::EndOfLine(eol) =>
             {
+                self.last_line_eof_column = self.char_offset - self.line_start_char_offset + 1;
                 self.char_offset += match eol
                 {
                     EndOfLine::LF => 1,
@@ -233,6 +259,20 @@ impl<'data, BC: ByteCursor<'data>> CharCursor<'data> for Utf8CharCursor<'data, B
                     Ok(s) => Ok(s.into()),
                     Err(_) => Err(INVALID_UTF8),
                 },
+            },
+        }
+    }
+
+    fn span_between(&self, other: &Self) -> CursorResult<Option<Span>>
+    {
+        match self.partial_cmp(other)
+        {
+            None => Err(CursorError::Incompatible),
+            Some(cmp) => match cmp
+            {
+                Ordering::Less => Ok(Some(Span::new(self.location(), other.prior_location().expect("greater cursor cannot be at beginning")))),
+                Ordering::Equal => Ok(None),
+                Ordering::Greater => Ok(Some(Span::new(other.location(), self.prior_location().expect("greater cursor cannot be at beginning")))),
             },
         }
     }

@@ -391,6 +391,8 @@ mod testing
                 // ^
                 assert_eq!("", &cursor1.between(&cursor2).unwrap());
                 assert_eq!("", &cursor2.between(&cursor1).unwrap());
+                assert_eq!(None, cursor1.span_between(&cursor2).unwrap());
+                assert_eq!(None, cursor2.span_between(&cursor1).unwrap());
 
                 cursor2.advance_many(5)?;
                 // Hello, World
@@ -398,6 +400,8 @@ mod testing
                 //      ^
                 assert_eq!("Hello", &cursor1.between(&cursor2).unwrap());
                 assert_eq!("Hello", &cursor2.between(&cursor1).unwrap());
+                assert_eq!("[1:1-5]", format!("{}", cursor1.span_between(&cursor2).unwrap().unwrap()));
+                assert_eq!("[1:1-5]", format!("{}", cursor2.span_between(&cursor1).unwrap().unwrap()));
 
                 cursor2.advance_many(2)?;
                 // Hello, World
@@ -491,6 +495,53 @@ impl std::fmt::Display for Location
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "[{}:{}]", self.line_number, self.column_number) }
 }
 
+/// Describes a span (from one Location to another) within a character resource
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Span
+{
+    // Inclusive start of the span
+    start: Location,
+    // Exclusive start of the span
+    end: Location,
+}
+
+impl Span
+{
+    pub fn new(l1: Location, l2: Location) -> Self
+    {
+        if l1 <= l2
+        {
+            Self { start: l1, end: l2 }
+        }
+        else
+        {
+            Self { start: l2, end: l1 }
+        }
+    }
+
+    pub fn start(&self) -> Location { self.start }
+    pub fn end(&self) -> Location { self.end }
+}
+
+impl std::fmt::Display for Span
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
+        if self.start == self.end
+        {
+            write!(f, "[{}:{}]", self.start.line_number, self.start.column_number)
+        }
+        else if self.start.line_number == self.end.line_number
+        {
+            write!(f, "[{}:{}-{}]", self.start.line_number, self.start.column_number, self.end.column_number)
+        }
+        else
+        {
+            write!(f, "[{}:{}-{}:{}]", self.start.line_number, self.start.column_number, self.end.line_number, self.end.column_number)
+        }
+    }
+}
+
 /// A `CharCursor` represents a character position in a some resource (represented by a [precursor::byte::ByteCursor]).
 pub trait CharCursor<'data>: Clone + PartialOrd
 {
@@ -548,6 +599,11 @@ pub trait CharCursor<'data>: Clone + PartialOrd
     /// Returns the string that starts at the lower of the cursors and terminates immediately before the higher.
     /// The `other` cursor must be for the same resource (e.g. cloned from this cursor).
     fn between(&self, other: &Self) -> CursorResult<Cow<'data, str>>;
+
+    /// Returns `Some<Span>` that starts at the lower of the cursors and terminates immediately before the higher.
+    /// If the cursors represent the same position `None` is returned.
+    /// The `other` cursor must be for the same resource (e.g. cloned from this cursor).
+    fn span_between(&self, other: &Self) -> CursorResult<Option<Span>>;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -565,4 +621,28 @@ pub enum EndOfLine
     CRLF,
     CR,
     Other,
+}
+
+#[cfg(test)]
+mod tests
+{
+    use super::*;
+
+    #[test]
+    fn display_for_location()
+    {
+        assert_eq!("[1:1]", format!("{}", Location::new(0, 1, 1)));
+        assert_eq!("[2:20]", format!("{}", Location::new(30, 2, 20)));
+    }
+
+    #[test]
+    fn display_for_span()
+    {
+        let l1 = Location::new(0, 1, 1);
+        let l2 = Location::new(0, 1, 4);
+        let l3 = Location::new(0, 5, 10);
+        assert_eq!("[1:1]", format!("{}", Span::new(l1, l1)));
+        assert_eq!("[1:1-4]", format!("{}", Span::new(l1, l2)));
+        assert_eq!("[1:1-5:10]", format!("{}", Span::new(l1, l3)));
+    }
 }
