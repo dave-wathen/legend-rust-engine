@@ -1,13 +1,13 @@
 // Copyright 2022 Dave Wathen. All rights reserved.
 
-use std::marker::PhantomData;
+use std::{borrow::Cow, marker::PhantomData};
 
 use regex_syntax::hir::{ClassBytes, ClassUnicode, Hir, Literal};
 use thiserror::Error;
 
 use crate::CursorError;
 
-use super::{CharCursor, CharToken};
+use super::{CharCursor, CharToken, Span};
 
 pub type RegexResult<T> = Result<T, RegexError>;
 
@@ -126,11 +126,11 @@ impl Regex
         compile(&parsed)
     }
 
-    pub fn matches<'a, C>(&self, cursor: &C) -> RegexResult<Match<'a, C>>
+    pub fn matches<'a, C>(&self, cursor_in: &C) -> RegexResult<Option<Match<'a, C>>>
     where
         C: CharCursor<'a> + std::fmt::Debug,
     {
-        let cursor = cursor.clone();
+        let cursor = cursor_in.clone();
         let mut stack = vec![(self.states[StateId(0)], cursor)];
 
         while !stack.is_empty()
@@ -167,10 +167,10 @@ impl Regex
                     }
                 }
                 State::NoOp(next) => stack.push((self.states[next], cursor)),
-                State::Terminal => return Ok(Match { matched_cursor: Some(cursor), phantom: PhantomData }),
+                State::Terminal => return Ok(Some(Match { start_cursor: cursor_in.clone(), matched_cursor: cursor, phantom: PhantomData })),
             }
         }
-        Ok(Match { matched_cursor: None, phantom: PhantomData })
+        Ok(None)
     }
 }
 
@@ -178,7 +178,8 @@ pub struct Match<'a, C>
 where
     C: CharCursor<'a>,
 {
-    matched_cursor: Option<C>,
+    start_cursor: C,
+    matched_cursor: C,
     phantom: PhantomData<&'a C>,
 }
 
@@ -186,8 +187,11 @@ impl<'a, C> Match<'a, C>
 where
     C: CharCursor<'a>,
 {
-    pub fn is_match(&self) -> bool { matches!(self.matched_cursor, Some(_)) }
-    pub fn is_not_match(&self) -> bool { matches!(self.matched_cursor, None) }
+    pub fn matched(&self) -> RegexResult<Cow<'a, str>> { Ok(self.start_cursor.between(&self.matched_cursor)?) }
+
+    pub fn matched_span(&self) -> RegexResult<Option<Span>> { Ok(self.start_cursor.span_between(&self.matched_cursor)?) }
+
+    pub fn into_end(self) -> C { self.matched_cursor }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -517,7 +521,7 @@ mod tests
     fn single_literal_match() -> RegexResult<()>
     {
         let re = Regex::new(r"a")?;
-        match_ok(&re, "a")?;
+        match_ok(&re, "a", "a")?;
         match_fails(&re, "xa")?;
         match_fails(&re, "")?;
         Ok(())
@@ -527,7 +531,7 @@ mod tests
     fn multichar_literal_match() -> RegexResult<()>
     {
         let re = Regex::new(r"abc")?;
-        match_ok(&re, "abc")?;
+        match_ok(&re, "abc", "abc")?;
         match_fails(&re, "xabc")?;
         match_fails(&re, "")?;
         Ok(())
@@ -537,8 +541,8 @@ mod tests
     fn alternative_match() -> RegexResult<()>
     {
         let re = Regex::new(r"a|b")?;
-        match_ok(&re, "a")?;
-        match_ok(&re, "b")?;
+        match_ok(&re, "a", "a")?;
+        match_ok(&re, "b", "b")?;
         match_fails(&re, "xa")?;
         match_fails(&re, "")?;
         Ok(())
@@ -548,12 +552,12 @@ mod tests
     fn custom_character_class_match() -> RegexResult<()>
     {
         let re = Regex::new(r"[abcxyz]")?;
-        match_ok(&re, "a")?;
-        match_ok(&re, "b")?;
-        match_ok(&re, "c")?;
-        match_ok(&re, "x")?;
-        match_ok(&re, "y")?;
-        match_ok(&re, "z")?;
+        match_ok(&re, "a", "a")?;
+        match_ok(&re, "b", "b")?;
+        match_ok(&re, "c", "c")?;
+        match_ok(&re, "x", "x")?;
+        match_ok(&re, "y", "y")?;
+        match_ok(&re, "z", "z")?;
         match_fails(&re, "m")?;
         match_fails(&re, "")?;
         Ok(())
@@ -563,7 +567,7 @@ mod tests
     fn alternative_causing_backtracking() -> RegexResult<()>
     {
         let re = Regex::new(r"aa|ab")?;
-        match_ok(&re, "ab")?;
+        match_ok(&re, "ab", "ab")?;
         Ok(())
     }
 
@@ -571,14 +575,14 @@ mod tests
     fn greedy_star_repetition() -> RegexResult<()>
     {
         let re = Regex::new(r"a*")?;
-        match_ok(&re, "a")?;
-        match_ok(&re, "aa")?;
-        match_ok(&re, "aaaaaaaaaaaaaaaaaaaaa")?;
-        match_ok(&re, "x")?;
-        match_ok(&re, "")?;
+        match_ok(&re, "a", "a")?;
+        match_ok(&re, "aa", "aa")?;
+        match_ok(&re, "aaaaaaaaaaaaaaaaaaaaab", "aaaaaaaaaaaaaaaaaaaaa")?;
+        match_ok(&re, "x", "")?;
+        match_ok(&re, "", "")?;
 
         let re = Regex::new(r"a*aaaaa")?;
-        match_ok(&re, "aaaaaaaaaaaaaaaaaaaaa")?;
+        match_ok(&re, "aaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaa")?;
         Ok(())
     }
 
@@ -586,9 +590,9 @@ mod tests
     fn lazy_star_repetition() -> RegexResult<()>
     {
         let re = Regex::new(r"a*?b")?;
-        match_ok(&re, "ab")?;
-        match_ok(&re, "aaaaab")?;
-        match_ok(&re, "b")?;
+        match_ok(&re, "ab", "ab")?;
+        match_ok(&re, "aaaaab", "aaaaab")?;
+        match_ok(&re, "b", "b")?;
         match_fails(&re, "x")?;
         match_fails(&re, "")?;
         Ok(())
@@ -598,15 +602,15 @@ mod tests
     fn greedy_plus_repetition() -> RegexResult<()>
     {
         let re = Regex::new(r"a+")?;
-        match_ok(&re, "a")?;
-        match_ok(&re, "aa")?;
-        match_ok(&re, "aaaaaaaaaaaaaaaaaaaaa")?;
+        match_ok(&re, "a", "a")?;
+        match_ok(&re, "aa", "aa")?;
+        match_ok(&re, "aaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaa")?;
         match_fails(&re, "x")?;
         match_fails(&re, "")?;
 
         let re = Regex::new(r"a+aaaaa")?;
-        match_ok(&re, "aaaaaaaaaaaaaaaaaaaaa")?;
-        match_ok(&re, "aaaaaa")?;
+        match_ok(&re, "aaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaa")?;
+        match_ok(&re, "aaaaaa", "aaaaaa")?;
         match_fails(&re, "aaaaa")?;
         Ok(())
     }
@@ -614,9 +618,12 @@ mod tests
     #[test]
     fn lazy_plus_repetition() -> RegexResult<()>
     {
+        let re = Regex::new(r"a+?")?;
+        match_ok(&re, "aa", "a")?;
+
         let re = Regex::new(r"a+?b")?;
-        match_ok(&re, "ab")?;
-        match_ok(&re, "aaaaab")?;
+        match_ok(&re, "ab", "ab")?;
+        match_ok(&re, "aaaaab", "aaaaab")?;
         match_fails(&re, "b")?;
         match_fails(&re, "x")?;
         match_fails(&re, "")?;
@@ -627,8 +634,8 @@ mod tests
     fn greedy_optional() -> RegexResult<()>
     {
         let re = Regex::new(r"a?b")?;
-        match_ok(&re, "ab")?;
-        match_ok(&re, "b")?;
+        match_ok(&re, "ab", "ab")?;
+        match_ok(&re, "b", "b")?;
         match_fails(&re, "x")?;
         match_fails(&re, "")?;
         Ok(())
@@ -637,9 +644,12 @@ mod tests
     #[test]
     fn lazy_optional() -> RegexResult<()>
     {
+        let re = Regex::new(r"a??")?;
+        match_ok(&re, "a", "")?;
+
         let re = Regex::new(r"a??b")?;
-        match_ok(&re, "ab")?;
-        match_ok(&re, "b")?;
+        match_ok(&re, "ab", "ab")?;
+        match_ok(&re, "b", "b")?;
         match_fails(&re, "x")?;
         match_fails(&re, "")?;
         Ok(())
@@ -649,7 +659,7 @@ mod tests
     fn exact_repetition() -> RegexResult<()>
     {
         let re = Regex::new(r"a{3}b")?;
-        match_ok(&re, "aaab")?;
+        match_ok(&re, "aaab", "aaab")?;
         match_fails(&re, "aaaab")?;
         match_fails(&re, "x")?;
         match_fails(&re, "")?;
@@ -660,8 +670,8 @@ mod tests
     fn at_least_greedy_repetition() -> RegexResult<()>
     {
         let re = Regex::new(r"a{3,}b")?;
-        match_ok(&re, "aaab")?;
-        match_ok(&re, "aaaaaaab")?;
+        match_ok(&re, "aaab", "aaab")?;
+        match_ok(&re, "aaaaaaab", "aaaaaaab")?;
         match_fails(&re, "aaa")?;
         match_fails(&re, "x")?;
         match_fails(&re, "")?;
@@ -671,9 +681,12 @@ mod tests
     #[test]
     fn at_least_lazy_repetition() -> RegexResult<()>
     {
+        let re = Regex::new(r"a{3,}?a")?;
+        match_ok(&re, "aaaaaa", "aaaa")?;
+
         let re = Regex::new(r"a{3,}?b")?;
-        match_ok(&re, "aaab")?;
-        match_ok(&re, "aaaaaaab")?;
+        match_ok(&re, "aaab", "aaab")?;
+        match_ok(&re, "aaaaaaab", "aaaaaaab")?;
         match_fails(&re, "aaa")?;
         match_fails(&re, "x")?;
         match_fails(&re, "")?;
@@ -684,10 +697,10 @@ mod tests
     fn bounded_greedy_repetition() -> RegexResult<()>
     {
         let re = Regex::new(r"a{3,6}b")?;
-        match_ok(&re, "aaab")?;
-        match_ok(&re, "aaaab")?;
-        match_ok(&re, "aaaaab")?;
-        match_ok(&re, "aaaaaab")?;
+        match_ok(&re, "aaab", "aaab")?;
+        match_ok(&re, "aaaab", "aaaab")?;
+        match_ok(&re, "aaaaab", "aaaaab")?;
+        match_ok(&re, "aaaaaab", "aaaaaab")?;
         match_fails(&re, "aaaaaaab")?;
         match_fails(&re, "aaa")?;
         match_fails(&re, "x")?;
@@ -699,10 +712,10 @@ mod tests
     fn bounded_lazy_repetition() -> RegexResult<()>
     {
         let re = Regex::new(r"a{3,6}?b")?;
-        match_ok(&re, "aaab")?;
-        match_ok(&re, "aaaab")?;
-        match_ok(&re, "aaaaab")?;
-        match_ok(&re, "aaaaaab")?;
+        match_ok(&re, "aaab", "aaab")?;
+        match_ok(&re, "aaaab", "aaaab")?;
+        match_ok(&re, "aaaaab", "aaaaab")?;
+        match_ok(&re, "aaaaaab", "aaaaaab")?;
         match_fails(&re, "aaaaaaab")?;
         match_fails(&re, "aaa")?;
         match_fails(&re, "x")?;
@@ -714,9 +727,9 @@ mod tests
     fn combined_repetitions_1() -> RegexResult<()>
     {
         let re = Regex::new(r"a*b+")?;
-        match_ok(&re, "aaaaaaaaaaaaaaaaaaaab")?;
-        match_ok(&re, "bbbbb")?;
-        match_ok(&re, "aaaabbbbb")?;
+        match_ok(&re, "aaaaaaaaaaaaaaaaaaaab", "aaaaaaaaaaaaaaaaaaaab")?;
+        match_ok(&re, "bbbbb", "bbbbb")?;
+        match_ok(&re, "aaaabbbbb", "aaaabbbbb")?;
         match_fails(&re, "aaaa")?;
         Ok(())
     }
@@ -725,10 +738,10 @@ mod tests
     fn combined_repetitions_2() -> RegexResult<()>
     {
         let re = Regex::new(r"(a|b)*b{3,6}")?;
-        match_ok(&re, "aaaaaaaaaaaaaaaaaabbb")?;
-        match_ok(&re, "bbbbbbbbbbbbabbb")?;
-        match_ok(&re, "bbbbbbbbbbbbabbbbbb")?;
-        match_ok(&re, "bbb")?;
+        match_ok(&re, "aaaaaaaaaaaaaaaaaabbb", "aaaaaaaaaaaaaaaaaabbb")?;
+        match_ok(&re, "bbbbbbbbbbbbabbb", "bbbbbbbbbbbbabbb")?;
+        match_ok(&re, "bbbbbbbbbbbbabbbbbb", "bbbbbbbbbbbbabbbbbb")?;
+        match_ok(&re, "bbb", "bbb")?;
         match_fails(&re, "aabbaa")?;
         match_fails(&re, "aaaaaaaaaaaaaaaaaabb")?;
         Ok(())
@@ -738,26 +751,45 @@ mod tests
     fn nested_repetitions() -> RegexResult<()>
     {
         let re = Regex::new(r"(((a|b)*c){3,6}d){2}")?;
-        match_ok(&re, "aaaaaaaaaaaaaaaaaabbbcabacacdcccccd")?;
+        match_ok(&re, "aaaaaaaaaaaaaaaaaabbbcabacacdcccccd", "aaaaaaaaaaaaaaaaaabbbcabacacdcccccd")?;
         Ok(())
     }
 
-    fn match_ok(re: &Regex, data: &str) -> RegexResult<()>
+    fn match_ok(re: &Regex, data: &str, expected: &str) -> RegexResult<()>
     {
-        assert!(do_match(re, data)?);
+        let bytes = ByteArrayCursor::new(data.as_bytes());
+        let cursor = Utf8CharCursor::new(bytes, crate::char::LineEndings::Smart);
+        let maybe_match = re.matches(&cursor)?;
+        assert!(maybe_match.is_some());
+
+        let re_match = maybe_match.unwrap();
+        let expected_len = expected.chars().count();
+
+        if expected.is_empty()
+        {
+            assert_eq!(None, re_match.matched_span()?);
+        }
+        else if expected_len == 1
+        {
+            assert_eq!("[1:1]", format!("{}", re_match.matched_span()?.unwrap()));
+        }
+        else
+        {
+            assert_eq!(format!("[1:1-{}]", expected_len), format!("{}", re_match.matched_span()?.unwrap()));
+        }
+
+        assert_eq!(expected, format!("{}", re_match.matched()?));
+        let end_cursor = re_match.into_end();
+        assert_eq!(expected, cursor.between(&end_cursor)?);
+
         Ok(())
     }
 
     fn match_fails(re: &Regex, data: &str) -> RegexResult<()>
     {
-        assert!(!do_match(re, data)?);
-        Ok(())
-    }
-
-    fn do_match(re: &Regex, data: &str) -> RegexResult<bool>
-    {
         let bytes = ByteArrayCursor::new(data.as_bytes());
         let cursor = Utf8CharCursor::new(bytes, crate::char::LineEndings::Smart);
-        Ok(re.matches(&cursor)?.is_match())
+        assert!(re.matches(&cursor)?.is_none());
+        Ok(())
     }
 }
