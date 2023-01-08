@@ -112,9 +112,9 @@ impl Display for Value
     {
         match self
         {
-            Value::Boolean(v) => write!(f, "{}", v),
-            Value::Integer(v) => write!(f, "{}", v),
-            Value::Float(v) => write!(f, "{}", v),
+            Value::Boolean(v) => write!(f, "{v}"),
+            Value::Integer(v) => write!(f, "{v}"),
+            Value::Float(v) => write!(f, "{v}"),
         }
     }
 }

@@ -100,7 +100,7 @@ impl fmt::Display for Multiplicity
 
 impl fmt::Debug for Multiplicity
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> { write!(f, "{}", self) }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> { write!(f, "{self}") }
 }
 
 #[cfg(test)]

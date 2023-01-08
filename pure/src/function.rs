@@ -62,7 +62,7 @@ impl FunctionArgument for &Collection
         }
         else
         {
-            let unexpected = PureExecutionError::UnexpectedValue { expected: format!("{}[*]", pure_type), got: self.full_type_as_string() };
+            let unexpected = PureExecutionError::UnexpectedValue { expected: format!("{pure_type}[*]"), got: self.full_type_as_string() };
             Err(PureExecutionError::IllegalArgument { func: func.to_string(), arg, cause: unexpected.to_string() })
         }
     }

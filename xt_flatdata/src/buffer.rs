@@ -276,7 +276,7 @@ impl BufferedReader
                     return;
                 }
             }
-            panic!("No block for index {}", index);
+            panic!("No block for index {index}");
         }
     }
 
@@ -292,7 +292,7 @@ impl BufferedReader
                     return;
                 }
             }
-            panic!("No block for index {}", index);
+            panic!("No block for index {index}");
         }
     }
 

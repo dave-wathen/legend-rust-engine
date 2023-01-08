@@ -122,7 +122,7 @@ impl Regex
 {
     pub fn new(re: &str) -> RegexResult<Regex>
     {
-        let parsed = regex_syntax::Parser::new().parse(re).map_err(|e| RegexError::Syntax { error: format!("{}", e) })?;
+        let parsed = regex_syntax::Parser::new().parse(re).map_err(|e| RegexError::Syntax { error: format!("{e}") })?;
         compile(&parsed)
     }
 
@@ -213,7 +213,7 @@ impl std::fmt::Debug for State
             State::Terminal => write!(f, "END:")?,
             State::Alternation(id) =>
             {
-                write!(f, "ALTERNATIVES: {:?}", id)?;
+                write!(f, "ALTERNATIVES: {id:?}")?;
             }
             State::Char(expected, next) =>
             {
@@ -221,9 +221,9 @@ impl std::fmt::Debug for State
             }
             State::Class(id, next) =>
             {
-                write!(f, "CLASS: {} if in {:?} ", next, id)?;
+                write!(f, "CLASS: {next} if in {id:?}")?;
             }
-            Self::NoOp(next) => write!(f, "NO_OP: {}", next)?,
+            Self::NoOp(next) => write!(f, "NO_OP: {next}")?,
         };
 
         Ok(())
@@ -274,8 +274,8 @@ impl std::fmt::Debug for Class
         {
             match tr_index
             {
-                0 => write!(f, "{}", tr)?,
-                1..=15 => write!(f, ", {}", tr)?,
+                0 => write!(f, "{tr}")?,
+                1..=15 => write!(f, ", {tr}")?,
                 16 => write!(f, ", ... {} more", self.0.len() - 16)?,
                 _ => (),
             }
@@ -487,7 +487,7 @@ fn adjust_state_transitions(state: &State, to: StateId) -> State
         State::Char(expected, _) => State::Char(*expected, to),
         State::Class(class_id, _) => State::Class(*class_id, to),
         State::NoOp(_) => State::NoOp(to),
-        _ => panic!("State should not be adjusted: {:?}", state),
+        _ => panic!("State should not be adjusted: {state:?}"),
     }
 }
 
@@ -775,7 +775,7 @@ mod tests
         }
         else
         {
-            assert_eq!(format!("[1:1-{}]", expected_len), format!("{}", re_match.matched_span()?.unwrap()));
+            assert_eq!(format!("[1:1-{expected_len}]"), format!("{}", re_match.matched_span()?.unwrap()));
         }
 
         assert_eq!(expected, format!("{}", re_match.matched()?));
